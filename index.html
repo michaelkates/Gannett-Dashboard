@@ -1,0 +1,1520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Gannett Affiliate Dashboard</title>
+<style>
+  html,body{margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827;}
+  #root{max-width:1100px;margin:0 auto;padding:1.5rem;}
+  .stamp{font-size:11px;color:#6b7280;text-align:right;margin-bottom:0.5rem;}
+  #loading{max-width:600px;margin:5rem auto;padding:1.5rem 2rem;background:#fff;border:1px solid #e5e7eb;border-radius:8px;text-align:center;color:#374151;font-size:14px;line-height:1.6;}
+  #loading .spinner{display:inline-block;width:14px;height:14px;border:2px solid #e5e7eb;border-top-color:#1d4ed8;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;margin-right:8px;}
+  #loading.error{background:#fef2f2;border-color:#fecaca;color:#991b1b;text-align:left;}
+  #loading.error .spinner{display:none;}
+  #loading code{background:#f3f4f6;padding:1px 6px;border-radius:3px;font-size:12px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<div id="loading"><span class="spinner"></span>Loading dashboard…</div>
+<div id="root"></div>
+
+<!-- ========================================================
+     CONFIG — paste your Apps Script Web App URL below.
+     Get this from script.google.com > Deploy > Manage deployments.
+     ======================================================== -->
+<script>
+  const APPS_SCRIPT_URL = 'https://script.google.com/a/macros/gdcgroup.com/s/AKfycbz3ESKrUJPALGrJQkMlGtKQvXgD6B2lCXy8ZdNa__O1f69y4H0vAxqA71_zqee5w90xbQ/exec';
+</script>
+
+<!-- ========================================================
+     Bootstrap: fetch GA4 data from Apps Script, then load
+     React + Babel and render the dashboard.
+     ======================================================== -->
+<script>
+(function() {
+  const loading = document.getElementById('loading');
+  function fail(msg) {
+    loading.classList.add('error');
+    loading.innerHTML = msg;
+  }
+
+  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'YOUR_APPS_SCRIPT_URL_HERE') {
+    fail('<strong>Setup incomplete.</strong><br>Edit <code>index.html</code> and replace <code>YOUR_APPS_SCRIPT_URL_HERE</code> (near the top of the file) with the Web App URL from your Apps Script deployment. See <code>README.md</code> for the full setup walkthrough.');
+    return;
+  }
+
+  loading.innerHTML = '<span class="spinner"></span>Fetching GA4 data… (this can take 5–10 seconds on first load)';
+
+  fetch(APPS_SCRIPT_URL + '?endpoint=all')
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(data => {
+      if (data.error) throw new Error(data.error);
+      window.__DATA__ = data;
+      loadScriptsAndRender();
+    })
+    .catch(err => {
+      fail('<strong>Failed to load GA4 data.</strong><br><br>' +
+           '<code>' + (err && err.message || err) + '</code><br><br>' +
+           'Common causes:<br>' +
+           '• Apps Script URL incorrect or not deployed<br>' +
+           '• Apps Script "Who has access" is set to "Only myself" instead of "Anyone"<br>' +
+           '• Google Analytics Data API service not added to the Apps Script project<br>' +
+           '• Google account that deployed the script lacks access to GA4 property ' +
+           '<br><br>See <code>README.md</code> troubleshooting section.');
+    });
+
+  function loadScriptsAndRender() {
+    const cdns = [
+      'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js'
+    ];
+    let i = 0;
+    function next() {
+      if (i >= cdns.length) return runDashboard();
+      const s = document.createElement('script');
+      s.src = cdns[i++];
+      s.onload = next;
+      s.onerror = () => fail('Failed to load: <code>' + s.src + '</code><br>Check your internet connection.');
+      document.head.appendChild(s);
+    }
+    next();
+  }
+
+  function runDashboard() {
+    try {
+      const tpl = document.getElementById('dashboard-source');
+      const src = tpl.textContent;
+      const out = Babel.transform(src, {presets: ['react']}).code;
+      loading.style.display = 'none';
+      const exec = document.createElement('script');
+      exec.textContent = out;
+      document.body.appendChild(exec);
+    } catch (err) {
+      fail('<strong>Dashboard render error.</strong><br><code>' + (err && err.message || err) + '</code>');
+    }
+  }
+})();
+</script>
+
+<!-- ========================================================
+     Dashboard source (React + JSX). Babel-transformed and
+     executed by the bootstrap above after data has loaded.
+     ======================================================== -->
+<script id="dashboard-source" type="text/template">
+const { useState, useMemo } = React;
+const D = window.__DATA__;
+// Project a month-to-date value to a full-month estimate at linear pace.
+const __proj = v => Math.round(v / D.daysElapsed * D.daysInMonth);
+const DATA_AS_OF = D.dataAsOf;
+const MO = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const ML = m => MO[parseInt(m.slice(4))-1] + "'" + m.slice(2,4);
+const fN = n => Number(n).toLocaleString();
+const fP = (a,b) => b>0 ? ((a/b)*100).toFixed(1)+"%" : "--";
+const sumArr = (arr,si,ei) => { let t=0; for(let i=si;i<=ei;i++) t+=arr[i]||0; return t; };
+
+// MONTHS includes current in-progress month (Jun 2026) with linear-pace PROJECTED end-of-month values
+// so MoM compares current vs prior month. Marked as projected via MONTH_IS_PROJECTED.
+const MONTHS = ["202505","202506","202507","202508","202509","202510","202511","202512","202601","202602","202603","202604","202605","202606"];
+const TOTAL_EC = [7731,5190,4740,3621,10359,14448,49262,37411,114170,69817,37086,27421,27153,26955];
+const TOTAL_SESS = [12261700,10209074,6986325,2990916,8104616,7258172,6084083,6140602,5513803,2135766,2572966,1929288,1568747,862245];
+const TOTAL_USERS = [7381607,5094480,3389680,2182536,5614404,4805733,3929830,4204906,3705201,1409947,1632537,1310725,1122148,734550];
+const MONTH_IS_PROJECTED = {"202606": true};  // partial month displayed as linear MTD-pace projection
+// Override current-month projections in TOTAL arrays from fetched MTD totals.
+TOTAL_EC[TOTAL_EC.length - 1] = __proj(D.MTD.ec);
+TOTAL_SESS[TOTAL_SESS.length - 1] = __proj(D.MTD.sessionsUnfiltered || D.MTD.sessions);
+TOTAL_USERS[TOTAL_USERS.length - 1] = __proj(D.MTD.usersUnfiltered || D.MTD.users);
+// Index of the latest fully-complete month (excludes any in-progress month flagged in MONTH_IS_PROJECTED).
+const LATEST_FULL_MONTH_IDX = (()=>{
+  for(let i=MONTHS.length-1;i>=0;i--){ if(!MONTH_IS_PROJECTED[MONTHS[i]]) return i; }
+  return MONTHS.length-1;
+})();
+
+const DAILY_START = D.dailyStart;
+const DAILY_EC = D.DAILY_EC;
+const DAILY_SESS = D.DAILY_SESS;
+const DAILY_DATES = (()=>{const o=[];let y=parseInt(DAILY_START.slice(0,4)),m=parseInt(DAILY_START.slice(4,6)),d=parseInt(DAILY_START.slice(6,8));for(let i=0;i<DAILY_EC.length;i++){o.push(`${y}${String(m).padStart(2,'0')}${String(d).padStart(2,'0')}`);const dim=new Date(y,m,0).getDate();d++;if(d>dim){d=1;m++;if(m>12){m=1;y++;}}}return o;})();
+const DL = ymd => MO[parseInt(ymd.slice(4,6))-1]+" "+parseInt(ymd.slice(6,8));
+
+const MTD = D.MTD;
+const LAST7 = D.LAST7;
+
+// Top pages by affiliate_click — pulled from GA4 (refreshed daily — current as of DATA_AS_OF)
+const TOP_PAGES_LAST7 = D.TOP_PAGES_LAST7;
+const TOP_PAGES_MTD = D.TOP_PAGES_MTD;
+const TOP_PAGES_APR = [
+  {path:"/story/sports/best-online-casinos-real-money/86800526007/",host:"www.freep.com",clicks:963},
+  {path:"/story/sports/best-florida-online-casinos/88107061007/",host:"www.news-press.com",clicks:781},
+  {path:"/story/casinos/2026/04/03/top-10-online-casinos-ranked-april-2026/88611195007/",host:"thelistwire.usatoday.com",clicks:769},
+  {path:"/story/casinos/2026/04/08/top-10-online-casinos-april-2026-rankings/88611195007/",host:"thelistwire.usatoday.com",clicks:733},
+  {path:"/story/casinos/2026/04/17/top-10-online-casinos-real-money-april-2026-ranked/88611195007/",host:"thelistwire.usatoday.com",clicks:670},
+  {path:"/story/sports/best-casino-apps-mobile-casinos-ranked/86952902007/",host:"www.freep.com",clicks:616},
+  {path:"/story/sports/best-online-casinos-for-real-money-play/86800526007/",host:"www.freep.com",clicks:575},
+  {path:"/story/casinos/2026/04/26/top-10-online-casinos-ranked-april/88611195007/",host:"thelistwire.usatoday.com",clicks:545},
+  {path:"/story/casinos/2026/04/15/top-10-online-casinos-real-money-april-2026/88611195007/",host:"thelistwire.usatoday.com",clicks:533},
+  {path:"/story/casinos/2026/04/13/top-10-online-casinos-real-money-april-2026-rankings/88611195007/",host:"thelistwire.usatoday.com",clicks:527},
+  {path:"/story/casinos/2026/04/20/top-10-online-casinos-real-money-ranked-april-2026/88611195007/",host:"thelistwire.usatoday.com",clicks:521},
+  {path:"/story/casinos/2026/04/24/top-10-online-casinos-ranked-april/88611195007/",host:"thelistwire.usatoday.com",clicks:502},
+  {path:"/story/casinos/2026/04/05/best-online-casinos-expert-rankings-for-april-2026/87792334007/",host:"ftw.usatoday.com",clicks:488},
+  {path:"/story/casinos/2026/04/02/best-no-deposit-casino-bonuses-april-2026/89337145007/",host:"thelistwire.usatoday.com",clicks:484},
+  {path:"/story/casinos/2026/04/18/best-new-online-slots-april-2026-expert-guide/88368520007/",host:"ftw.usatoday.com",clicks:400},
+  {path:"/story/casinos/2026/04/15/best-real-money-slots-online-april-2026/88148280007/",host:"ftw.usatoday.com",clicks:394},
+  {path:"/story/casinos/2026/04/06/best-no-deposit-casino-bonuses-april-2026/89337145007/",host:"thelistwire.usatoday.com",clicks:389},
+  {path:"/story/casinos/2026/04/04/list-best-sweepstakes-casinos-for-april-2026/88613772007/",host:"thelistwire.usatoday.com",clicks:332},
+  {path:"/story/casinos/2026/04/16/best-no-deposit-casino-bonuses-ranked-april-2026/89337145007/",host:"thelistwire.usatoday.com",clicks:320},
+  {path:"/story/sports/review/2026/04/25/online-casinos-for-real-money-this-weekend/89775148007/",host:"giantswire.usatoday.com",clicks:308},
+];
+
+const HOSTS = {
+  ftw:{label:"For The Win",host:"ftw.usatoday.com",color:"#378ADD",group:"national",data:[616,107,5,25,443,2216,23122,21431,99401,58827,17581,7539,10387,16485]},
+  freep:{label:"Detroit Free Press",host:"www.freep.com",color:"#D85A30",group:"local",data:[51,43,20,32,40,1977,18297,8916,7700,3551,3291,3320,3748,5940]},
+  usatoday:{label:"USA Today",host:"www.usatoday.com",color:"#1D9E75",group:"national",data:[4820,3375,3537,1871,5365,6242,2768,1840,1782,605,503,632,685,105]},
+  listwire:{label:"The List Wire",host:"thelistwire.usatoday.com",color:"#7F77DD",group:"national",data:[3,0,2,0,0,0,0,20,0,3845,12214,11679,8388,2805]},
+  sbwire:{label:"SportsbookWire",host:"sportsbookwire.usatoday.com",color:"#BA7517",group:"national",data:[855,784,571,504,988,1327,1625,1406,1357,612,980,750,405,165]},
+  azcentral:{label:"AZ Central",host:"www.azcentral.com",color:"#D4537E",group:"local",data:[113,53,10,228,1103,722,524,584,837,100,225,120,138,60]},
+  chiefswire:{label:"Chiefs Wire",host:"chiefswire.usatoday.com",color:"#E24B4A",group:"nfl",data:[221,319,45,60,132,193,977,1569,545,129,116,36,122,135]},
+  newspress:{label:"News-Press (FL)",host:"www.news-press.com",color:"#F97316",group:"local",data:[0,0,0,0,0,0,0,0,45,229,378,1355,964,690]},
+  indystar:{label:"IndyStar",host:"www.indystar.com",color:"#06B6D4",group:"local",data:[36,87,136,208,41,0,51,116,255,257,268,172,187,300]},
+  courier:{label:"Courier-Journal",host:"www.courier-journal.com",color:"#639922",group:"local",data:[347,4,0,2,27,0,33,53,107,375,390,254,291,345]},
+  eagleswire:{label:"Eagles Wire",host:"theeagleswire.usatoday.com",color:"#A855F7",group:"nfl",data:[116,74,49,83,131,108,138,187,250,52,0,10,68,0]},
+  tennessean:{label:"Tennessean",host:"www.tennessean.com",color:"#0EA5E9",group:"local",data:[7,3,4,5,6,0,11,8,294,411,227,143,219,105]},
+  giantswire:{label:"Giants Wire",host:"giantswire.usatoday.com",color:"#FB923C",group:"nfl",data:[2,6,6,0,17,20,5,2,4,0,0,819,540,60]},
+  collegesports:{label:"College Sports Wire",host:"collegesportswire.usatoday.com",color:"#4ADE80",group:"college",data:[1,0,0,79,194,174,143,89,48,52,77,3,0,465]},
+  bearswire:{label:"Bears Wire",host:"bearswire.usatoday.com",color:"#C084FC",group:"nfl",data:[1,1,1,1,143,113,154,156,222,0,0,0,0,0]},
+  hawkcentral:{label:"Hawk Central",host:"www.hawkcentral.com",color:"#FBBF24",group:"local",data:[185,134,181,107,84,28,29,4,8,21,0,0,0,0]},
+  cincinnati:{label:"Cincinnati.com",host:"www.cincinnati.com",color:"#60A5FA",group:"local",data:[4,6,2,15,51,23,12,34,111,153,137,72,86,105]},
+  ugawire:{label:"UGA Wire",host:"ugawire.usatoday.com",color:"#F472B6",group:"college",data:[0,0,1,9,161,75,191,117,15,0,0,0,0,0]},
+  desmoines:{label:"Des Moines Register",host:"www.desmoinesregister.com",color:"#22C55E",group:"local",data:[8,5,5,55,74,27,17,66,20,75,101,75,73,30]},
+  rolltide:{label:"Roll Tide Wire",host:"rolltidewire.usatoday.com",color:"#EF4444",group:"college",data:[0,0,0,14,141,161,102,99,4,2,0,5,2,0]},
+};
+const HOST_KEYS = Object.keys(HOSTS);
+// Override current-month projection from fetched HOST_DAILY (sum last daysElapsed days per host)
+HOST_KEYS.forEach(k => {
+  const arr = (D.HOST_DAILY && D.HOST_DAILY[HOSTS[k].host]) || [];
+  const sum = arr.slice(-D.daysElapsed).reduce((a,b) => a + b, 0);
+  HOSTS[k].data[HOSTS[k].data.length - 1] = __proj(sum);
+});
+// Product categories — based on GA4 customEvent:product (e.g. "BetMGM Sports" vs "BetMGM Casino")
+const PRODUCTS = {
+  prediction:{label:"Prediction",       color:"#06B6D4", data:[0,0,0,0,0,0,0,0,0,0,136,17,91,195]},
+  fantasy:   {label:"Fantasy / DFS",    color:"#1D9E75", data:[1150,480,409,556,1194,1014,1093,907,1126,399,440,324,222,150]},
+  sports:    {label:"Sports betting",   color:"#378ADD", data:[6220,1760,1044,1370,2994,2929,3708,4351,3293,1850,1740,1218,936,450]},
+  rmc:       {label:"Real-money casino",color:"#D85A30", data:[64,150,178,86,73,251,1971,1385,3700,2219,1458,1149,1475,1260]},
+  sweeps:    {label:"Social / sweeps",  color:"#BA7517", data:[295,2798,3086,1415,1195,4680,39649,29272,104774,65139,32832,24320,23909,24885]},
+  other:     {label:"Other / unmapped", color:"#888780", data:[2,2,23,194,4903,5574,2841,1496,1277,210,480,393,303,0]},
+};
+const PRODUCT_KEYS = Object.keys(PRODUCTS);
+
+// Product-level data — each row is a unique customEvent:product value
+const OPERATORS = [
+  {n:"BetRivers Social Casino",c:"sweeps",o:"user",l7:962,mtd:3189,apr:4303},
+  {n:"Dorados Casino",c:"sweeps",o:"user",l7:372,mtd:1526,apr:402},
+  {n:"CrownCoins Social Casino",c:"sweeps",o:"user",l7:411,mtd:1288,apr:1830},
+  {n:"Rolla Social Casino",c:"sweeps",o:"user",l7:304,mtd:1106,apr:1622},
+  {n:"Jackpota Social Casino",c:"sweeps",o:"user",l7:281,mtd:994,apr:791},
+  {n:"Mega Frenzy Casino",c:"sweeps",o:"user",l7:241,mtd:880,apr:1188},
+  {n:"Stake.us Social Casino",c:"sweeps",o:"user",l7:216,mtd:701,apr:650},
+  {n:"McLuck Social Casino",c:"sweeps",o:"user",l7:157,mtd:668,apr:1270},
+  {n:"Zula Social Casino",c:"sweeps",o:"user",l7:141,mtd:587,apr:847},
+  {n:"Mega Bonanza Social Casino",c:"sweeps",o:"user",l7:151,mtd:565,apr:779},
+  {n:"SpinBlitz Social Casino",c:"sweeps",o:"user",l7:113,mtd:538,apr:775},
+  {n:"WOWVegas Social Casino",c:"sweeps",o:"user",l7:140,mtd:520,apr:746},
+  {n:"Hello Millions Social Casino",c:"sweeps",o:"user",l7:139,mtd:515,apr:879},
+  {n:"High 5 Sweeps Casino",c:"sweeps",o:"user",l7:106,mtd:457,apr:586},
+  {n:"Spree Social Casino",c:"sweeps",o:"user",l7:125,mtd:447,apr:776},
+  {n:"PlayFame Social Casino",c:"sweeps",o:"user",l7:110,mtd:444,apr:614},
+  {n:"Fortune Coins Social Casino",c:"sweeps",o:"user",l7:93,mtd:396,apr:559},
+  {n:"RichSweeps Social Casino",c:"sweeps",o:"user",l7:110,mtd:386,apr:467},
+  {n:"Ace.com Social Casino",c:"sweeps",o:"user",l7:109,mtd:365,apr:489},
+  {n:"Funrize Social Casino",c:"sweeps",o:"user",l7:91,mtd:354,apr:589},
+  {n:"Horseshoe Online Casino",c:"rmc",o:"user",l7:108,mtd:346,apr:243},
+  {n:"Jumbo88 Social Casino",c:"sweeps",o:"user",l7:114,mtd:345,apr:543},
+  {n:"SpeedSweeps Social Casino",c:"sweeps",o:"user",l7:95,mtd:337,apr:442},
+  {n:"BetMGM Sports",c:"sports",o:"user",l7:54,mtd:317,apr:472},
+  {n:"Pulsz Social Casino",c:"sweeps",o:"user",l7:85,mtd:308,apr:533},
+  {n:"Casino Click Social Casino",c:"sweeps",o:"user",l7:77,mtd:305,apr:554},
+  {n:"Dara Casino",c:"sweeps",o:"user",l7:75,mtd:262,apr:390},
+  {n:"NoLimit Coins Social Casino",c:"sweeps",o:"user",l7:74,mtd:238,apr:453},
+  {n:"Bet365 Sports",c:"sports",o:"user",l7:56,mtd:195,apr:207},
+  {n:"Boom Fantasy",c:"fantasy",o:"user",l7:34,mtd:180,apr:308},
+  {n:"Bet365 Casino",c:"rmc",o:"user",l7:56,mtd:144,apr:95},
+  {n:"Golden Nugget Casino",c:"rmc",o:"user",l7:27,mtd:118,apr:139},
+  {n:"Caesars Casino",c:"rmc",o:"user",l7:52,mtd:115,apr:100},
+  {n:"DraftKings Sports",c:"sports",o:"user",l7:26,mtd:114,apr:143},
+  {n:"BetMGM Casino",c:"rmc",o:"user",l7:46,mtd:106,apr:145},
+  {n:"Fanatics Casino",c:"rmc",o:"user",l7:26,mtd:89,apr:105},
+  {n:"DraftKings Casino",c:"rmc",o:"user",l7:27,mtd:69,apr:83},
+  {n:"FanDuel Sports",c:"sports",o:"user",l7:8,mtd:69,apr:120},
+  {n:"Fanatics Sport",c:"sports",o:"user",l7:5,mtd:63,apr:188},
+  {n:"Kalshi Prediction",c:"prediction",o:"user",l7:17,mtd:53,apr:13},
+  {n:"Hard Rock Bet Casino",c:"rmc",o:"user",l7:22,mtd:44,apr:34},
+  {n:"FanDuel Casino",c:"rmc",o:"user",l7:18,mtd:38,apr:59},
+  {n:"BetRivers Casino",c:"rmc",o:"user",l7:17,mtd:38,apr:37},
+  {n:"Caesars Sports",c:"sports",o:"user",l7:9,mtd:36,apr:66},
+  {n:"Polymarket Prediction",c:"prediction",o:"user",l7:16,mtd:32,apr:4},
+  {n:"Hard Rock Bet Sports",c:"sports",o:"user",l7:8,mtd:25,apr:19},
+  {n:"Borgata Casino",c:"rmc",o:"user",l7:8,mtd:24,apr:42},
+  {n:"OG Market Prediction",c:"prediction",o:"user",l7:2,mtd:8,apr:0},
+  {n:"Novig Sports",c:"fantasy",o:"user",l7:4,mtd:7,apr:14},
+  {n:"BetRivers.net Social Casino",c:"sweeps",o:"user",l7:1,mtd:6,apr:4},
+  {n:"Playstar Casino",c:"rmc",o:"user",l7:3,mtd:6,apr:8},
+  {n:"Onyx Odds DFS Betting",c:"fantasy",o:"user",l7:1,mtd:4,apr:0},
+  {n:"Wandando Casino",c:"sweeps",o:"user",l7:1,mtd:3,apr:3},
+  {n:"BetRivers Sports",c:"sports",o:"user",l7:0,mtd:2,apr:2},
+  {n:"Lucky Days Casino",c:"rmc",o:"user",l7:0,mtd:2,apr:12},
+  {n:"DragonSlots Casino",c:"rmc",o:"auto",l7:1,mtd:1,apr:0},
+  {n:"Axe Casino",c:"rmc",o:"user",l7:0,mtd:1,apr:0},
+  {n:"Casino Days Casino",c:"rmc",o:"auto",l7:0,mtd:1,apr:17},
+  {n:"Toppz Casino",c:"rmc",o:"user",l7:0,mtd:1,apr:15},
+  {n:"ToonieBet Casino",c:"rmc",o:"user",l7:0,mtd:1,apr:3},
+  {n:"LeoVegas Casino",c:"rmc",o:"user",l7:0,mtd:1,apr:0},
+  {n:"Fire Vegas Casino",c:"rmc",o:"user",l7:0,mtd:1,apr:0},
+  {n:"Ruby Fortune Casino",c:"rmc",o:"user",l7:0,mtd:1,apr:0},
+  {n:"Vegasino Casino",c:"rmc",o:"user",l7:0,mtd:1,apr:1},
+  {n:"LoneStar Casino",c:"sweeps",o:"user",l7:0,mtd:0,apr:1153},
+  {n:"Cazino Social Casino",c:"sweeps",o:"user",l7:0,mtd:0,apr:27},
+  {n:"RealPrize Social Casino",c:"sweeps",o:"auto",l7:0,mtd:0,apr:27},
+  {n:"LuckyStake Casino",c:"sweeps",o:"auto",l7:0,mtd:0,apr:26},
+  {n:"SpinAway Casino",c:"rmc",o:"auto",l7:0,mtd:0,apr:9},
+  {n:"Sporttrade Sports",c:"sports",o:"user",l7:0,mtd:0,apr:1},
+  {n:"Betr Sports",c:"fantasy",o:"user",l7:0,mtd:0,apr:1},
+  {n:"BetBeast Casino",c:"other",o:"auto",l7:0,mtd:0,apr:1},
+  {n:"Dogghouse Betting",c:"other",o:"auto",l7:0,mtd:0,apr:1},
+  {n:"Big Shot Games Casino",c:"sweeps",o:"user",l7:0,mtd:0,apr:0},
+  {n:"BET99 Casino",c:"rmc",o:"auto",l7:0,mtd:0,apr:1},
+  {n:"Zodiac Casino",c:"rmc",o:"auto",l7:0,mtd:0,apr:1},
+  {n:"Slotbox Casino",c:"sweeps",o:"auto",l7:0,mtd:0,apr:1},
+  {n:"Vegas Gems Social Casino",c:"sweeps",o:"auto",l7:0,mtd:0,apr:1},
+  {n:"Winrolla Casino",c:"sweeps",o:"auto",l7:0,mtd:0,apr:1},
+  {n:"ESPN BET Sportsbook",c:"sports",o:"auto",l7:0,mtd:0,apr:0},
+  {n:"Prime Sportsbook",c:"sports",o:"auto",l7:0,mtd:0,apr:0},
+  {n:"theScore Bet Sportsbook",c:"sports",o:"auto",l7:0,mtd:0,apr:0},
+  {n:"TwinSpires Sportsbook",c:"sports",o:"auto",l7:0,mtd:0,apr:0},
+  {n:"Underdog Sports",c:"fantasy",o:"auto",l7:0,mtd:0,apr:0},
+  {n:"Dabble Sports",c:"fantasy",o:"auto",l7:0,mtd:0,apr:0},
+  {n:"PrizePicks",c:"fantasy",o:"auto",l7:0,mtd:0,apr:0},
+  {n:"OwnersBox Daily Fantasy",c:"fantasy",o:"auto",l7:0,mtd:0,apr:0},
+  {n:"Vivid Picks DFS",c:"fantasy",o:"auto",l7:0,mtd:0,apr:0},
+  {n:"Bleacher Nation Fantasy Betting",c:"fantasy",o:"auto",l7:0,mtd:0,apr:1},
+  {n:"Legendz Social Casino",c:"sweeps",o:"auto",l7:0,mtd:0,apr:0},
+  {n:"Spinfinite Social Casino",c:"sweeps",o:"auto",l7:0,mtd:0,apr:0},
+  {n:"SweepNext Casino",c:"sweeps",o:"auto",l7:0,mtd:0,apr:0},
+  {n:"TheMoneyFactory Social Casino",c:"sweeps",o:"auto",l7:0,mtd:0,apr:0},
+  {n:"Jackpot City US Casino",c:"rmc",o:"auto",l7:0,mtd:0,apr:0},
+  {n:"Betway US Casino",c:"rmc",o:"auto",l7:0,mtd:0,apr:0},
+  {n:"Gold Treasure Casino",c:"other",o:"auto",l7:0,mtd:0,apr:0},
+  {n:"Sixty6 Casino",c:"other",o:"auto",l7:0,mtd:0,apr:0},
+  {n:"The Win Zone Casino",c:"other",o:"auto",l7:0,mtd:0,apr:0},
+  {n:"Splash Coins Casino",c:"sweeps",o:"user",l7:158,mtd:158,apr:0},
+  {n:"(untagged)",c:"other",o:"auto",l7:20,mtd:277,apr:391},
+  {n:"(other tail)",c:"other",o:"auto",l7:14,mtd:58,apr:73},
+  {n:"GranaWin Casino",c:"rmc",o:"auto",l7:2,mtd:2,apr:0},
+  {n:"Zotabet Casino",c:"rmc",o:"auto",l7:1,mtd:1,apr:0},
+  {n:"Alexander Casino",c:"rmc",o:"auto",l7:1,mtd:1,apr:0},
+  {n:"22bet Casino",c:"rmc",o:"auto",l7:1,mtd:1,apr:0},
+  {n:"Vera & John Casino",c:"rmc",o:"auto",l7:1,mtd:1,apr:0},
+  {n:"Spinlander Casino",c:"rmc",o:"auto",l7:1,mtd:1,apr:0},
+  {n:"Vegazone Casino",c:"rmc",o:"auto",l7:1,mtd:1,apr:0},
+  {n:"SpinMills Casino",c:"rmc",o:"auto",l7:1,mtd:1,apr:0},
+];
+const GROUPS = {national:{label:"National / Sports",color:"#378ADD"},nfl:{label:"NFL Team Wires",color:"#D85A30"},college:{label:"College Wires",color:"#1D9E75"},local:{label:"Local Newspapers",color:"#7F77DD"}};
+// Override current-month PRODUCTS projection from fetched PROD_DAILY (summed by category, last daysElapsed days)
+(() => {
+  const _norm = s => (s||'').trim().replace(/\s+/g,' ');
+  const _nameToCat = {};
+  OPERATORS.forEach(o => { _nameToCat[_norm(o.n)] = o.c; });
+  const _catSums = {};
+  PRODUCT_KEYS.forEach(c => _catSums[c] = 0);
+  Object.keys(D.PROD_DAILY || {}).forEach(name => {
+    const n = _norm(name);
+    const cat = _nameToCat[n] || 'other';
+    const sum = D.PROD_DAILY[name].slice(-D.daysElapsed).reduce((a,b) => a + b, 0);
+    if (_catSums[cat] !== undefined) _catSums[cat] += sum;
+  });
+  PRODUCT_KEYS.forEach(c => {
+    PRODUCTS[c].data[PRODUCTS[c].data.length - 1] = __proj(_catSums[c]);
+  });
+})();
+
+
+// Per-product daily series — for window filtering and projections (≥50-click products kept; tail aggregated)
+const PROD_DAILY = D.PROD_DAILY;
+
+// Per-host daily series — for accurate By vertical totals at sub-monthly granularity
+const HOST_DAILY = D.HOST_DAILY;
+
+// ─── shared components ──────────────────────────────────────────────
+function PctBadge({pct,label}){
+  if(pct===null||pct===undefined)return <span style={{fontSize:11,color:"#9ca3af"}}>--</span>;
+  const pos=pct>=0;
+  return <span style={{fontSize:11,fontWeight:500,padding:"2px 7px",borderRadius:99,background:pos?"#f0fdf4":"#fef2f2",color:pos?"#15803d":"#b91c1c"}}>{(pos?"+":"")+pct.toFixed(1)+"%"}{label?" "+label:""}</span>;
+}
+const btnStyle=a=>({fontSize:11,padding:"3px 10px",borderRadius:6,border:"1px solid #e5e7eb",cursor:"pointer",background:a?"#eff6ff":"transparent",color:a?"#1d4ed8":"#6b7280",fontWeight:a?500:400});
+function MiniLine({data,color,h=26}){
+  if(!data||data.length<2)return null;
+  const max=Math.max(...data,1),W=200,H=h,step=W/(data.length-1||1);
+  const pts=data.map((v,i)=>`${(i*step).toFixed(1)},${(H-2-(v/max)*(H-4)).toFixed(1)}`).join(" ");
+  return <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:h,overflow:"hidden"}}><polyline points={pts} fill="none" stroke={color} strokeWidth={1.6}/></svg>;
+}
+function GranToggle({value,onChange}){
+  const opt=(k,l)=>{const a=value===k;return <button key={k} onClick={()=>onChange(k)} style={{flex:1,padding:"14px 24px",fontSize:15,fontWeight:a?700:500,border:a?"2px solid #111827":"2px solid #e5e7eb",background:a?"#111827":"white",color:a?"white":"#6b7280",borderRadius:10,cursor:"pointer"}}>{l}</button>;};
+  return <div style={{display:"flex",gap:8,marginBottom:"1.25rem"}}>{opt("monthly","Monthly")}{opt("daily","Daily")}</div>;
+}
+function RecentActivity(){
+  const aprEC=TOTAL_EC[LATEST_FULL_MONTH_IDX]||0,aprSess=TOTAL_SESS[LATEST_FULL_MONTH_IDX]||0;
+  const wow=LAST7.prevEc>0?((LAST7.ec-LAST7.prevEc)/LAST7.prevEc*100):null;
+  const mtdProj=Math.round((MTD.ec/MTD.daysElapsed)*MTD.daysInMonth);
+  const mtdVsApr=aprEC>0?((mtdProj-aprEC)/aprEC*100):null;
+  return (
+    <div style={{background:"linear-gradient(135deg,#fef3c7 0%,#fffbeb 100%)",border:"2px solid #fbbf24",borderRadius:14,padding:"1rem 1.25rem",marginBottom:"1.25rem"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"0.75rem"}}>
+        <span style={{fontSize:12,fontWeight:700,color:"#92400e",textTransform:"uppercase",letterSpacing:"0.08em"}}>Recent Activity</span>
+        <span style={{fontSize:11,color:"#a16207"}}>Through {DATA_AS_OF}</span>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:"0.75rem"}}>
+        <div style={{background:"white",borderRadius:10,padding:"0.85rem 1rem",border:"1px solid #fde68a"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <div style={{fontSize:10,fontWeight:600,color:"#92400e",textTransform:"uppercase"}}>Last 7 days</div>
+            <PctBadge pct={wow} label="WoW"/>
+          </div>
+          <div style={{fontSize:26,fontWeight:800,color:"#D85A30",lineHeight:1}}>{fN(LAST7.ec)}</div>
+          <div style={{fontSize:11,color:"#6b7280",marginTop:4}}>{(LAST7.ec/7).toFixed(0)}/day · CR {fP(LAST7.ec,LAST7.sessions)}</div>
+        </div>
+        <div style={{background:"white",borderRadius:10,padding:"0.85rem 1rem",border:"1px solid #fde68a"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <div style={{fontSize:10,fontWeight:600,color:"#92400e",textTransform:"uppercase"}}>MTD</div>
+            <PctBadge pct={mtdVsApr} label="proj vs May"/>
+          </div>
+          <div style={{fontSize:26,fontWeight:800,color:"#D85A30",lineHeight:1}}>{fN(MTD.ec)}</div>
+          <div style={{fontSize:11,color:"#6b7280",marginTop:4}}>proj {fN(mtdProj)} · {(MTD.ec/MTD.daysElapsed).toFixed(0)}/day</div>
+          <div style={{background:"#f3f4f6",borderRadius:99,height:5,overflow:"hidden",marginTop:6}}>
+            <div style={{width:(MTD.daysElapsed/MTD.daysInMonth*100)+"%",height:"100%",background:"#D85A30",opacity:0.7}}/>
+          </div>
+        </div>
+        <div style={{background:"white",borderRadius:10,padding:"0.85rem 1rem",border:"1px solid #fde68a"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <div style={{fontSize:10,fontWeight:600,color:"#92400e",textTransform:"uppercase"}}>May (last full)</div>
+            <PctBadge pct={TOTAL_EC[LATEST_FULL_MONTH_IDX-1]>0?((aprEC-TOTAL_EC[LATEST_FULL_MONTH_IDX-1])/TOTAL_EC[LATEST_FULL_MONTH_IDX-1]*100):null} label="MoM"/>
+          </div>
+          <div style={{fontSize:26,fontWeight:800,color:"#6b7280",lineHeight:1}}>{fN(aprEC)}</div>
+          <div style={{fontSize:11,color:"#6b7280",marginTop:4}}>{(aprEC/30).toFixed(0)}/day · CR {fP(aprEC,aprSess)}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── charts ──────────────────────────────────────────────
+function MonthlyChart({si,ei,h=220}){
+  const ec=TOTAL_EC.slice(si,ei+1),sess=TOTAL_SESS.slice(si,ei+1),labels=MONTHS.slice(si,ei+1).map(m=>ML(m));
+  const W=880,H=h,pl=58,pr=58,pt=8,pb=28,iW=W-pl-pr,iH=H-pt-pb;
+  if(!ec.length)return null;
+  const lmax=Math.max(...sess,1),rmax=Math.max(...ec,1);
+  const yl=v=>pt+iH-(v/lmax)*iH,yr=v=>pt+iH-(v/rmax)*iH;
+  const step=iW/(ec.length-1||1),nth=Math.ceil(ec.length/8);
+  const mkP=(arr,fn)=>arr.map((v,i)=>`${i===0?"M":"L"}${(pl+i*step).toFixed(1)},${fn(v||0).toFixed(1)}`).join(" ");
+  const ticks=[0,Math.round(lmax*0.5),lmax];
+  const fmt=t=>t>=1e6?(t/1e6).toFixed(1)+"M":t>=1000?(t/1000).toFixed(0)+"K":""+t;
+  return <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",overflow:"visible"}}>
+    {ticks.map(t=>[<line key={"g"+t} x1={pl} x2={pl+iW} y1={yl(t)} y2={yl(t)} stroke="#f3f4f6" strokeWidth={0.7}/>,<text key={"lt"+t} x={pl-6} y={yl(t)+4} textAnchor="end" fontSize={10} fill="#378ADD">{fmt(t)}</text>])}
+    {[Math.round(rmax*0.5),rmax].map(t=>(<text key={"rt"+t} x={pl+iW+6} y={yr(t)+4} textAnchor="start" fontSize={10} fill="#D85A30">{fmt(t)}</text>))}
+    {ec.map((_,i)=>i%nth===0&&<text key={"xl"+i} x={pl+i*step} y={H-4} textAnchor="middle" fontSize={10} fill="#9ca3af">{labels[i]||""}</text>)}
+    <path d={mkP(sess,yl)} fill="none" stroke="#378ADD" strokeWidth={2}/><path d={mkP(ec,yr)} fill="none" stroke="#D85A30" strokeWidth={2.5}/></svg>;
+}
+function DailyChart({dsi,dei,h=220}){
+  const ec=DAILY_EC.slice(dsi,dei+1),sess=DAILY_SESS.slice(dsi,dei+1);
+  const W=880,H=h,pl=58,pr=58,pt=8,pb=28,iW=W-pl-pr,iH=H-pt-pb;
+  if(!ec.length)return null;
+  const lmax=Math.max(...sess,1),rmax=Math.max(...ec,1);
+  const yl=v=>pt+iH-(v/lmax)*iH,yr=v=>pt+iH-(v/rmax)*iH;
+  const step=iW/(ec.length-1||1),nth=Math.max(1,Math.ceil(ec.length/10));
+  const mkP=(arr,fn)=>arr.map((v,i)=>`${i===0?"M":"L"}${(pl+i*step).toFixed(1)},${fn(v||0).toFixed(1)}`).join(" ");
+  const ticks=[0,Math.round(lmax*0.5),lmax];
+  const fmt=t=>t>=1e6?(t/1e6).toFixed(1)+"M":t>=1000?(t/1000).toFixed(1)+"K":""+t;
+  return <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",overflow:"visible"}}>
+    {ticks.map(t=>[<line key={"g"+t} x1={pl} x2={pl+iW} y1={yl(t)} y2={yl(t)} stroke="#f3f4f6" strokeWidth={0.7}/>,<text key={"lt"+t} x={pl-6} y={yl(t)+4} textAnchor="end" fontSize={10} fill="#378ADD">{fmt(t)}</text>])}
+    {[Math.round(rmax*0.5),rmax].map(t=>(<text key={"rt"+t} x={pl+iW+6} y={yr(t)+4} textAnchor="start" fontSize={10} fill="#D85A30">{fmt(t)}</text>))}
+    {ec.map((_,i)=>i%nth===0&&<text key={"xl"+i} x={pl+i*step} y={H-4} textAnchor="middle" fontSize={10} fill="#9ca3af">{DL(DAILY_DATES[dsi+i])}</text>)}
+    <path d={mkP(sess,yl)} fill="none" stroke="#378ADD" strokeWidth={1.5}/><path d={mkP(ec,yr)} fill="none" stroke="#D85A30" strokeWidth={1.8}/></svg>;
+}
+function TrendChartSimple({slices,colors,labels,h=180,compareSlices,compareColors}){
+  const W=860,H=h,pl=48,pr=8,pt=8,pb=24,iW=W-pl-pr,iH=H-pt-pb;
+  if(!slices||!slices[0]||!slices[0].length)return null;
+  // Compute max across primary + comparison so both fit
+  const all = compareSlices ? [...slices.flat(), ...compareSlices.flat()] : slices.flat();
+  const maxV=Math.max(...all,1);
+  const step=iW/(slices[0].length-1||1);
+  const nth=Math.ceil(slices[0].length/8);
+  const yy=v=>pt+iH-(v/maxV)*iH;
+  // Plot helper: arr may be shorter/longer than primary; align to primary's X-step but stop at arr.length
+  const mkP=(arr,stepLocal)=>arr.map((v,i)=>`${i===0?"M":"L"}${(pl+i*stepLocal).toFixed(1)},${yy(v||0).toFixed(1)}`).join(" ");
+  const ticks=[0,Math.round(maxV*0.5),maxV];
+  return <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",overflow:"visible"}}>
+    {ticks.map(t=>[<line key={"g"+t} x1={pl} x2={pl+iW} y1={yy(t)} y2={yy(t)} stroke="#e5e7eb" strokeWidth={0.5}/>,<text key={"tl"+t} x={pl-6} y={yy(t)+4} textAnchor="end" fontSize={11} fill="#9ca3af">{t>=1000?(t/1000).toFixed(0)+"K":""+t}</text>])}
+    {slices[0].map((_,i)=>i%nth===0&&<text key={"xl"+i} x={pl+i*step} y={H} textAnchor="middle" fontSize={11} fill="#9ca3af">{labels[i]||""}</text>)}
+    {compareSlices && compareSlices.map((arr,ki)=>{
+      const cStep = arr.length>1 ? iW/(arr.length-1) : iW;
+      return <path key={"c"+ki} d={mkP(arr,cStep)} fill="none" stroke={compareColors?compareColors[ki]:"#9ca3af"} strokeWidth={1.5} strokeDasharray="4,3" opacity={0.7}/>;
+    })}
+    {slices.map((arr,ki)=><path key={"s"+ki} d={mkP(arr,step)} fill="none" stroke={colors[ki]} strokeWidth={2}/>)}</svg>;
+}
+
+// ─── new sub-views ──────────────────────────────────────────────
+function TopPagesView(){
+  const [window,setWindow]=useState("last7");
+  const sets={last7:{label:"Last 7 days",data:TOP_PAGES_LAST7},mtd:{label:"MTD (Jun)",data:TOP_PAGES_MTD},apr:{label:"May",data:TOP_PAGES_APR}};
+  const cur=sets[window];
+  const max=Math.max(...cur.data.map(r=>r.clicks),1);
+  return <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"1.25rem"}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"0.75rem",flexWrap:"wrap",gap:8}}>
+      <p style={{margin:0,fontSize:11,fontWeight:500,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.07em"}}>Top pages by affiliate_click — {cur.label}</p>
+      <div style={{display:"flex",gap:6}}>
+        {Object.entries(sets).map(([k,v])=><button key={k} onClick={()=>setWindow(k)} style={btnStyle(window===k)}>{v.label}</button>)}
+      </div>
+    </div>
+    <div style={{overflowX:"auto"}}>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+        <thead><tr style={{borderBottom:"1px solid #e5e7eb"}}>
+          {["#","Page","Subsite","Clicks","Share"].map((h,i)=>(<th key={i} style={{padding:"6px 8px",textAlign:i<=2?"left":"right",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>{h}</th>))}
+        </tr></thead>
+        <tbody>
+          {(()=>{const tot=cur.data.reduce((a,r)=>a+r.clicks,0);return cur.data.map((r,i)=>{
+            const info=HOST_KEYS.find(k=>HOSTS[k].host===r.host);
+            const color=info?HOSTS[info].color:"#888";
+            const label=info?HOSTS[info].label:r.host;
+            const fname=r.path.split('/').filter(Boolean).slice(-2,-1)[0]||r.path;
+            return <tr key={i} style={{borderBottom:"1px solid #f9fafb"}}>
+              <td style={{padding:"7px 8px",color:"#9ca3af",fontSize:11}}>{i+1}</td>
+              <td style={{padding:"7px 8px",fontSize:11,maxWidth:380,overflow:"hidden",textOverflow:"ellipsis"}}>
+                <a href={`https://${r.host}${r.path}`} target="_blank" style={{color:"#1d4ed8",textDecoration:"none"}} title={r.path}>{fname.replace(/-/g," ").slice(0,80)}</a>
+              </td>
+              <td style={{padding:"7px 8px"}}><span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:6,height:6,borderRadius:"50%",background:color}}/><span style={{fontSize:11,color:"#374151"}}>{label}</span></span></td>
+              <td style={{padding:"7px 8px",textAlign:"right",fontWeight:600,color:color}}>{fN(r.clicks)}</td>
+              <td style={{padding:"7px 8px",textAlign:"right",color:"#9ca3af",fontSize:11}}>{fP(r.clicks,tot)}</td>
+            </tr>;
+          });})()}
+        </tbody>
+      </table>
+    </div>
+    <p style={{margin:"0.5rem 0 0",fontSize:11,color:"#9ca3af"}}>Top 20 by event count. Page titles are derived from URL slug. Click a link to open the article.</p>
+  </div>;
+}
+
+function MomView({ei}){
+  const currIsProj = MONTH_IS_PROJECTED[MONTHS[ei]];
+  const prevIsProj = ei>0 && MONTH_IS_PROJECTED[MONTHS[ei-1]];
+  return <div>
+    <div style={{background:"#f9fafb",borderRadius:8,padding:"0.65rem 1rem",marginBottom:"1rem",fontSize:13,color:"#6b7280"}}>
+      Month-over-month — <strong>{ML(MONTHS[ei])}</strong>{currIsProj&&<span style={{marginLeft:4,fontSize:11,padding:"1px 6px",borderRadius:4,background:"#fef3c7",color:"#92400e"}}>projected</span>} vs <strong>{ei>0?ML(MONTHS[ei-1]):"n/a"}</strong>{prevIsProj&&<span style={{marginLeft:4,fontSize:11,padding:"1px 6px",borderRadius:4,background:"#fef3c7",color:"#92400e"}}>projected</span>}
+      {currIsProj && <div style={{marginTop:4,fontSize:11,color:"#92400e"}}>⚠ Current month ({ML(MONTHS[ei])}) shown at linear MTD-pace projection ({MTD.daysElapsed}/{MTD.daysInMonth} days actual).</div>}
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:"0.75rem"}}>
+      {[["Affiliate clicks","#D85A30",TOTAL_EC],["Sessions","#378ADD",TOTAL_SESS],["Users","#1D9E75",TOTAL_USERS]].map(([label,color,arr])=>{
+        const curr=arr[ei]||0,prev=ei>0?arr[ei-1]||0:null,diff=prev!==null?curr-prev:null,pct=prev>0?((curr-prev)/prev*100):null;
+        return <div key={label} style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"1.25rem"}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:"0.5rem"}}><div style={{width:7,height:7,borderRadius:"50%",background:color}}/><span style={{fontSize:13,fontWeight:500}}>{label}</span>{pct!==null&&<PctBadge pct={pct}/>}</div>
+          <div style={{fontSize:28,fontWeight:700,color,marginBottom:4}}>{fN(curr)}</div>
+          <div style={{fontSize:12,color:"#6b7280"}}>Prev: <strong style={{color:"#111"}}>{prev!==null?fN(prev):"n/a"}</strong>{diff!==null&&diff>0&&<span style={{color:"#15803d",marginLeft:6}}>↑ {fN(diff)}</span>}{diff!==null&&diff<0&&<span style={{color:"#b91c1c",marginLeft:6}}>↓ {fN(Math.abs(diff))}</span>}</div>
+        </div>;
+      })}
+    </div>
+  </div>;
+}
+
+function YoyView(){
+  // May 2026 MTD vs May 2025 (only month with prior-year data)
+  const may25 = TOTAL_EC[0]; // 7731
+  const may26mtd = MTD.ec;
+  const may26proj = Math.round((MTD.ec/MTD.daysElapsed)*MTD.daysInMonth);
+  const yoyMtd = may25>0?((may26mtd-may25)/may25*100):null;
+  const yoyProj = may25>0?((may26proj-may25)/may25*100):null;
+  return <div>
+    <div style={{background:"#fef3c7",border:"1px solid #fde68a",borderRadius:8,padding:"0.65rem 1rem",marginBottom:"1rem",fontSize:12,color:"#92400e"}}>
+      ⚠ Year-over-year is limited. Data history begins May 2025, so YoY is only available for May 2026 (vs May 2025). Full YoY tables become available June 2026 and onward.
+    </div>
+    <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"1.25rem"}}>
+      <p style={{margin:"0 0 1rem",fontSize:11,fontWeight:500,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.07em"}}>May 2026 vs May 2025 — affiliate clicks</p>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:"0.75rem"}}>
+        <div style={{background:"#f9fafb",borderRadius:10,padding:"1rem"}}>
+          <div style={{fontSize:11,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>May 2025 (full)</div>
+          <div style={{fontSize:28,fontWeight:700,color:"#6b7280"}}>{fN(may25)}</div>
+        </div>
+        <div style={{background:"#fff7ed",borderRadius:10,padding:"1rem",border:"1px solid #fed7aa"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+            <div style={{fontSize:11,color:"#9a3412",textTransform:"uppercase",letterSpacing:"0.07em"}}>May 2026 MTD</div>
+            <PctBadge pct={yoyMtd} label="YoY"/>
+          </div>
+          <div style={{fontSize:28,fontWeight:700,color:"#D85A30"}}>{fN(may26mtd)}</div>
+          <div style={{fontSize:11,color:"#92400e",marginTop:4}}>{MTD.daysElapsed} of {MTD.daysInMonth} days</div>
+        </div>
+        <div style={{background:"#fff7ed",borderRadius:10,padding:"1rem",border:"1px solid #fed7aa"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+            <div style={{fontSize:11,color:"#9a3412",textTransform:"uppercase",letterSpacing:"0.07em"}}>May 2026 projected</div>
+            <PctBadge pct={yoyProj} label="YoY"/>
+          </div>
+          <div style={{fontSize:28,fontWeight:700,color:"#D85A30"}}>{fN(may26proj)}</div>
+          <div style={{fontSize:11,color:"#92400e",marginTop:4}}>linear extrapolation</div>
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+function MtdView(){
+  const aprEC=TOTAL_EC[LATEST_FULL_MONTH_IDX]||0;
+  const proj=Math.round((MTD.ec/MTD.daysElapsed)*MTD.daysInMonth);
+  const trailing30=DAILY_EC.slice(-30).reduce((a,b)=>a+b,0);
+  const trailing30Daily=trailing30/30;
+  const conservativeProj=Math.round(MTD.ec + trailing30Daily * (MTD.daysInMonth - MTD.daysElapsed));
+  const vsApr=aprEC>0?((proj-aprEC)/aprEC*100):null;
+  return <div>
+    <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"1.25rem",marginBottom:"1rem"}}>
+      <p style={{margin:"0 0 0.75rem",fontSize:11,fontWeight:500,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.07em"}}>{MTD.month} — month to date</p>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:"0.75rem",marginBottom:"1rem"}}>
+        <div style={{background:"#fff7ed",borderRadius:10,padding:"0.85rem 1rem",border:"1px solid #fed7aa"}}>
+          <div style={{fontSize:10,color:"#9a3412",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>MTD clicks</div>
+          <div style={{fontSize:26,fontWeight:800,color:"#D85A30"}}>{fN(MTD.ec)}</div>
+          <div style={{fontSize:11,color:"#92400e",marginTop:4}}>{(MTD.ec/MTD.daysElapsed).toFixed(0)}/day · {MTD.daysElapsed}d</div>
+        </div>
+        <div style={{background:"#f9fafb",borderRadius:10,padding:"0.85rem 1rem"}}>
+          <div style={{fontSize:10,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>Sessions</div>
+          <div style={{fontSize:26,fontWeight:800,color:"#378ADD"}}>{fN(MTD.sessions)}</div>
+          <div style={{fontSize:11,color:"#6b7280",marginTop:4}}>CR {fP(MTD.ec,MTD.sessions)}</div>
+        </div>
+        <div style={{background:"#f9fafb",borderRadius:10,padding:"0.85rem 1rem"}}>
+          <div style={{fontSize:10,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>Users</div>
+          <div style={{fontSize:26,fontWeight:800,color:"#1D9E75"}}>{fN(MTD.users)}</div>
+        </div>
+      </div>
+      <div style={{background:"#f3f4f6",borderRadius:99,height:8,overflow:"hidden",marginBottom:4}}>
+        <div style={{width:(MTD.daysElapsed/MTD.daysInMonth*100)+"%",height:"100%",background:"#D85A30",opacity:0.65}}/>
+      </div>
+      <div style={{fontSize:11,color:"#6b7280"}}>{MTD.daysElapsed}/{MTD.daysInMonth} days · {((MTD.daysElapsed/MTD.daysInMonth)*100).toFixed(0)}% of month elapsed</div>
+    </div>
+    <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"1.25rem"}}>
+      <p style={{margin:"0 0 0.75rem",fontSize:11,fontWeight:500,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.07em"}}>By subsite — MTD top 10</p>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+        <thead><tr style={{borderBottom:"1px solid #e5e7eb"}}>{["Subsite","MTD","Share"].map((h,i)=>(<th key={i} style={{padding:"6px 10px",textAlign:i===0?"left":"right",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>{h}</th>))}</tr></thead>
+        <tbody>
+          {Object.entries(MTD.byHost).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([h,v])=>{
+            const info=HOST_KEYS.find(k=>HOSTS[k].host===h);
+            const color=info?HOSTS[info].color:"#888";
+            const label=info?HOSTS[info].label:h;
+            return <tr key={h} style={{borderBottom:"1px solid #f9fafb"}}>
+              <td style={{padding:"7px 10px"}}><span style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:7,height:7,borderRadius:"50%",background:color}}/>{label}</span></td>
+              <td style={{padding:"7px 10px",textAlign:"right",fontWeight:600,color}}>{fN(v)}</td>
+              <td style={{padding:"7px 10px",textAlign:"right",color:"#9ca3af",fontSize:11}}>{fP(v,MTD.ec)}</td>
+            </tr>;
+          })}
+        </tbody>
+      </table>
+    </div>
+  </div>;
+}
+
+function ProjectionView(){
+  const aprEC=TOTAL_EC[LATEST_FULL_MONTH_IDX]||0;
+  const linearProj=Math.round((MTD.ec/MTD.daysElapsed)*MTD.daysInMonth);
+  const trailing7Daily=DAILY_EC.slice(-7).reduce((a,b)=>a+b,0)/7;
+  const trailing30Daily=DAILY_EC.slice(-30).reduce((a,b)=>a+b,0)/30;
+  const trailing90Daily=DAILY_EC.slice(-90).reduce((a,b)=>a+b,0)/90;
+  const daysLeft=MTD.daysInMonth - MTD.daysElapsed;
+  const recent7Proj=Math.round(MTD.ec + trailing7Daily*daysLeft);
+  const recent30Proj=Math.round(MTD.ec + trailing30Daily*daysLeft);
+  // Q2 (Apr-Jun) — Apr+May in books, Jun projecting (linear MTD pace)
+  const aprActual = TOTAL_EC[LATEST_FULL_MONTH_IDX-1] || 0;  // April 2026
+  const q2Total = aprActual + aprEC + linearProj;            // Apr + May actual + Jun proj
+  // Year-end (2026) — Jan-May in books + MTD Jun + project Jul-Dec using trailing-30 avg
+  const yearSoFar = TOTAL_EC[8]+TOTAL_EC[9]+TOTAL_EC[10]+TOTAL_EC[11]+TOTAL_EC[12]; // Jan26..May26
+  const remainingDays2026 = 30-MTD.daysElapsed + 31 + 31 + 30 + 31 + 30 + 31; // remainder of Jun + Jul..Dec
+  const yearEndProj = yearSoFar + MTD.ec + Math.round(trailing30Daily*remainingDays2026);
+  return <div>
+    <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"1.25rem",marginBottom:"1rem"}}>
+      <p style={{margin:"0 0 0.85rem",fontSize:11,fontWeight:500,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.07em"}}>Month-end projections — {MTD.month}</p>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:"0.75rem"}}>
+        <div style={{background:"#f0f9ff",borderRadius:10,padding:"0.85rem 1rem",border:"1px solid #bae6fd"}}>
+          <div style={{fontSize:10,color:"#075985",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>Linear (MTD pace)</div>
+          <div style={{fontSize:24,fontWeight:800,color:"#0369a1"}}>{fN(linearProj)}</div>
+          <div style={{fontSize:11,color:"#075985",marginTop:4}}>MTD ÷ days × month days</div>
+        </div>
+        <div style={{background:"#f0fdf4",borderRadius:10,padding:"0.85rem 1rem",border:"1px solid #bbf7d0"}}>
+          <div style={{fontSize:10,color:"#166534",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>Trailing-7 avg</div>
+          <div style={{fontSize:24,fontWeight:800,color:"#15803d"}}>{fN(recent7Proj)}</div>
+          <div style={{fontSize:11,color:"#166534",marginTop:4}}>MTD + ({trailing7Daily.toFixed(0)}/day × {daysLeft}d)</div>
+        </div>
+        <div style={{background:"#fef3c7",borderRadius:10,padding:"0.85rem 1rem",border:"1px solid #fde68a"}}>
+          <div style={{fontSize:10,color:"#854d0e",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>Trailing-30 avg</div>
+          <div style={{fontSize:24,fontWeight:800,color:"#a16207"}}>{fN(recent30Proj)}</div>
+          <div style={{fontSize:11,color:"#854d0e",marginTop:4}}>MTD + ({trailing30Daily.toFixed(0)}/day × {daysLeft}d)</div>
+        </div>
+        <div style={{background:"#f9fafb",borderRadius:10,padding:"0.85rem 1rem"}}>
+          <div style={{fontSize:10,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>May (actual)</div>
+          <div style={{fontSize:24,fontWeight:800,color:"#6b7280"}}>{fN(aprEC)}</div>
+          <div style={{fontSize:11,color:"#6b7280",marginTop:4}}>reference benchmark</div>
+        </div>
+      </div>
+    </div>
+    <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"1.25rem"}}>
+      <p style={{margin:"0 0 0.85rem",fontSize:11,fontWeight:500,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.07em"}}>Longer-horizon forecasts (using trailing-30 avg = {trailing30Daily.toFixed(0)}/day)</p>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:"0.75rem"}}>
+        <div style={{background:"#f9fafb",borderRadius:10,padding:"0.85rem 1rem"}}>
+          <div style={{fontSize:10,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>Q2 2026 (Apr–Jun)</div>
+          <div style={{fontSize:24,fontWeight:800}}>{fN(q2Total)}</div>
+          <div style={{fontSize:11,color:"#6b7280",marginTop:4}}>Apr + May actual + Jun proj</div>
+        </div>
+        <div style={{background:"#f9fafb",borderRadius:10,padding:"0.85rem 1rem"}}>
+          <div style={{fontSize:10,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>Calendar year 2026</div>
+          <div style={{fontSize:24,fontWeight:800}}>{fN(yearEndProj)}</div>
+          <div style={{fontSize:11,color:"#6b7280",marginTop:4}}>Jan–MTD actual + remainder estimate</div>
+        </div>
+      </div>
+      <p style={{margin:"0.75rem 0 0",fontSize:11,color:"#9ca3af",lineHeight:1.5}}>Projections are mechanical extrapolations. They assume no NFL/playoff seasonality, no editorial spikes (Kentucky Derby was a big May driver), and no operator changes. Useful as a floor, not a ceiling.</p>
+    </div>
+  </div>;
+}
+
+// ─── ROLLUP ──────────────────────────────────────────────
+function RollupTab(){
+  const [gran,setGran]=useState("monthly");
+  // Single source of truth for date range: daily indices. Monthly view derives months from this range.
+  const presets = buildPresets();
+  const [dsi,setDsi]=useState(0);
+  const [dei,setDei]=useState(DAILY_EC.length-1);
+  const [si,ei] = monthRangeFromDailyRange(dsi,dei);
+  const [av,setAv]=useState("trend");
+  const isMonthly=gran==="monthly";
+  const totalEC=useMemo(()=>isMonthly?sumArr(TOTAL_EC,si,ei):sumArr(DAILY_EC,dsi,dei),[gran,si,ei,dsi,dei]);
+  const totalSess=useMemo(()=>isMonthly?sumArr(TOTAL_SESS,si,ei):sumArr(DAILY_SESS,dsi,dei),[gran,si,ei,dsi,dei]);
+  const cr=totalSess>0?((totalEC/totalSess)*100).toFixed(3)+"%":"--";
+  const rangeLabel=`${fmtFull(dsi)} → ${fmtFull(dei)}`;
+  const VIEWS = [["trend","Trend"],["pages","Top pages"],["mom","MoM"],["yoy","YoY"],["mtd","MTD"],["projection","Projection"]];
+  return <div>
+    <RecentActivity/>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"0.75rem",flexWrap:"wrap",gap:8}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <span style={{fontSize:16,fontWeight:600}}>Gannett — Rollup</span>
+        <span style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:"#f3f4f6",color:"#6b7280"}}>affiliate_click · all hosts</span>
+      </div>
+      <span style={{fontSize:12,color:"#6b7280"}}>{rangeLabel}</span>
+    </div>
+    {(av==="trend"||av==="mom") && <GranToggle value={gran} onChange={setGran}/>}
+    {(av==="trend") && <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"1rem",marginBottom:"1rem"}}>
+      <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+        <span style={{fontSize:11,fontWeight:600,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.06em"}}>Date range</span>
+        <DateRangePicker dsi={dsi} dei={dei} onChange={(a,b)=>{setDsi(a);setDei(b);}} presets={presets}/>
+        <span style={{fontSize:12,color:"#9ca3af"}}>{dei-dsi+1}d{isMonthly?` · monthly chart: ${ML(MONTHS[si])} → ${ML(MONTHS[ei])}`:""}</span>
+      </div>
+      {isMonthly && DAILY_DATES[dei].slice(0,6) > MONTHS[MONTHS.length-1] && <div style={{marginTop:8,fontSize:11,color:"#92400e",background:"#fef3c7",padding:"5px 9px",borderRadius:6}}>⚠ Range extends into a month with no monthly aggregate yet (current month in progress). Monthly chart shows the most recent full month; switch to Daily for day-level resolution.</div>}
+    </div>}
+    {av==="trend"&&<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:"1rem"}}>
+      {[["Affiliate clicks",totalEC,"#D85A30"],["Sessions",totalSess,"#378ADD"],["Conv. rate",cr,"#1D9E75"]].map(([l,v,c])=>(
+        <div key={l} style={{background:"white",border:"1px solid #e5e7eb",borderRadius:10,padding:"0.9rem 1.1rem"}}>
+          <div style={{fontSize:10,color:"#9ca3af",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>{l}</div>
+          <div style={{fontSize:22,fontWeight:700,color:c}}>{typeof v==="string"?v:fN(v)}</div>
+        </div>
+      ))}
+    </div>}
+    <div style={{display:"flex",borderBottom:"1px solid #e5e7eb",marginBottom:"1rem",overflowX:"auto"}}>
+      {VIEWS.map(([k,l])=>{const a=av===k;return <button key={k} onClick={()=>setAv(k)} style={{background:"none",border:"none",borderBottom:a?"2px solid #111":"2px solid transparent",padding:"9px 16px",fontSize:13,fontWeight:a?600:400,color:a?"#111":"#6b7280",cursor:"pointer",whiteSpace:"nowrap"}}>{l}</button>;})}
+    </div>
+    {av==="trend"&&<div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"1.25rem"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"0.75rem",flexWrap:"wrap",gap:8}}>
+        <p style={{margin:0,fontSize:11,fontWeight:500,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.07em"}}>Rollup — {isMonthly?"monthly":"daily"} affiliate clicks & sessions</p>
+        <div style={{display:"flex",gap:12}}>
+          <span style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#6b7280"}}><span style={{width:9,height:9,borderRadius:2,background:"#378ADD"}}/>Sessions</span>
+          <span style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#6b7280"}}><span style={{width:9,height:9,borderRadius:2,background:"#D85A30"}}/>Clicks</span>
+        </div>
+      </div>
+      {isMonthly ? <MonthlyChart si={si} ei={ei}/> : <DailyChart dsi={dsi} dei={dei}/>}
+    </div>}
+    {av==="pages"&&<TopPagesView/>}
+    {av==="mom"&&<MomView ei={ei}/>}
+    {av==="yoy"&&<YoyView/>}
+    {av==="mtd"&&<MtdView/>}
+    {av==="projection"&&<ProjectionView/>}
+  </div>;
+}
+
+// ─── SUBSITES ──────────────────────────────────────────────
+function SubsitesTab(){
+  const presets = buildPresets();
+  const [dsi,setDsi]=useState(0);
+  const [dei,setDei]=useState(DAILY_EC.length-1);
+  const [si,ei] = monthRangeFromDailyRange(dsi,dei);
+  const [ac,setAc]=useState("all");
+  // Sum HOST_DAILY across the picked daily range (exact date-range totals, not month-aggregated).
+  const totals=useMemo(()=>{
+    const r={};
+    HOST_KEYS.forEach(k=>{
+      const info=HOSTS[k];
+      const arr=HOST_DAILY[info.host];
+      let sum=0;
+      if(arr) for(let i=dsi;i<=dei&&i<arr.length;i++) sum+=(arr[i]||0);
+      r[k]=sum;
+    });
+    r.all=HOST_KEYS.reduce((a,k)=>a+r[k],0);
+    return r;
+  },[dsi,dei]);
+  const sortedKeys=useMemo(()=>HOST_KEYS.slice().sort((a,b)=>totals[b]-totals[a]),[totals]);
+  return <div>
+    <RecentActivity/>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"0.75rem",flexWrap:"wrap",gap:8}}>
+      <span style={{fontSize:16,fontWeight:600}}>Subsites — drill into individual hosts</span>
+      <span style={{fontSize:12,color:"#6b7280"}}>{fmtFull(dsi)} → {fmtFull(dei)}</span>
+    </div>
+    <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"1rem",marginBottom:"1rem",display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+      <span style={{fontSize:11,fontWeight:600,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.06em"}}>Date range</span>
+      <DateRangePicker dsi={dsi} dei={dei} onChange={(a,b)=>{setDsi(a);setDei(b);}} presets={presets}/>
+      <span style={{fontSize:12,color:"#9ca3af"}}>daily totals · {dei-dsi+1}d window</span>
+    </div>
+    <div style={{marginBottom:"1rem"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:6}}>
+        {sortedKeys.map(k=>{const info=HOSTS[k],tot=totals[k]||0,active=ac===k;return <button key={k} onClick={()=>setAc(k)} style={{display:"flex",flexDirection:"column",gap:2,textAlign:"left",cursor:"pointer",padding:"0.55rem 0.7rem",borderRadius:8,background:active?"white":"#f9fafb",border:active?`2px solid ${info.color}`:"1px solid #e5e7eb"}}>
+          <div style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:6,height:6,borderRadius:"50%",background:info.color,flexShrink:0}}/><span style={{fontSize:10,fontWeight:500,color:active?info.color:"#6b7280",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{info.label}</span></div>
+          <span style={{fontSize:16,fontWeight:700,color:active?info.color:"#111",lineHeight:1.1}}>{fN(tot)}</span>
+          <span style={{fontSize:10,color:"#9ca3af"}}>{fP(tot,totals.all)}</span>
+        </button>;})}
+      </div>
+    </div>
+    <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"1.25rem"}}>
+      <p style={{margin:"0 0 0.75rem",fontSize:11,fontWeight:500,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.07em"}}>Per-subsite recent activity</p>
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead><tr style={{borderBottom:"1px solid #e5e7eb"}}>
+            {["Subsite","Last 7d","MTD","May","MTD vs May"].map((h,i)=>(<th key={i} style={{padding:"6px 10px",textAlign:i===0?"left":"right",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>{h}</th>))}
+          </tr></thead>
+          <tbody>
+            {HOST_KEYS.map(k=>({k,info:HOSTS[k],l7:LAST7.byHost[HOSTS[k].host]||0,mtd:MTD.byHost[HOSTS[k].host]||0,apr:HOSTS[k].data[LATEST_FULL_MONTH_IDX]||0})).sort((a,b)=>b.l7-a.l7).map(({k,info,l7,mtd,apr})=>{
+              const mtdProj=Math.round((mtd/MTD.daysElapsed)*MTD.daysInMonth);
+              const vs=apr>0?((mtdProj-apr)/apr*100):null;
+              return <tr key={k} style={{borderBottom:"1px solid #f9fafb"}}>
+                <td style={{padding:"7px 10px"}}><span style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:7,height:7,borderRadius:"50%",background:info.color}}/>{info.label}</span></td>
+                <td style={{padding:"7px 10px",textAlign:"right",fontWeight:600,color:l7>0?info.color:"#d1d5db"}}>{l7>0?fN(l7):"--"}</td>
+                <td style={{padding:"7px 10px",textAlign:"right",fontWeight:500,color:mtd>0?info.color:"#d1d5db"}}>{mtd>0?fN(mtd):"--"}</td>
+                <td style={{padding:"7px 10px",textAlign:"right",color:"#6b7280"}}>{apr>0?fN(apr):"--"}</td>
+                <td style={{padding:"7px 10px",textAlign:"right"}}><PctBadge pct={vs}/></td>
+              </tr>;
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>;
+}
+
+// ─── COMPARISON ──────────────────────────────────────────────
+// Shared presets for date picker (built at runtime since they need DAILY_EC.length)
+function buildPresets(){
+  const N=DAILY_EC.length;
+  // Compute current in-progress month and last full month dynamically from DAILY_DATES.
+  // "Current month" = the month YDAY (last day with data) belongs to.
+  // "Last full month" = the month immediately prior to the current month.
+  const lastYM = DAILY_DATES[N-1].slice(0,6);
+  const curStart = (typeof FIRST_OF_MONTH_IDX!=="undefined" && FIRST_OF_MONTH_IDX[lastYM]) || (N-31);
+  // Last full month = month before lastYM
+  const ly = parseInt(lastYM.slice(0,4)), lm = parseInt(lastYM.slice(4,6));
+  const prevY = lm===1 ? ly-1 : ly, prevM = lm===1 ? 12 : lm-1;
+  const prevYM = `${prevY}${String(prevM).padStart(2,'0')}`;
+  const prevStart = (typeof FIRST_OF_MONTH_IDX!=="undefined" && FIRST_OF_MONTH_IDX[prevYM]) || Math.max(0, curStart-30);
+  const prevEnd = curStart - 1;
+  const prevLabel = MO[prevM-1] + "'" + String(prevY).slice(2,4); // e.g. "Apr'26"
+  return [
+    {label:"Last 7d",    start:Math.max(0,N-7),   end:N-1},
+    {label:"Last 30d",   start:Math.max(0,N-30),  end:N-1},
+    {label:"Last 90d",   start:Math.max(0,N-90),  end:N-1},
+    {label:"Last 180d",  start:Math.max(0,N-180), end:N-1},
+    {label:"MTD",        start:curStart,           end:N-1},
+    {label:prevLabel,    start:Math.max(0,prevStart), end:Math.max(0,prevEnd)},
+    {label:"1 yr",       start:Math.max(0,N-365), end:N-1},
+    {label:"All",        start:0,                  end:N-1},
+  ];
+}
+
+// For a daily range, return the inclusive month index range that overlaps (using MONTHS array)
+// Handles the case where the picked range extends beyond MONTHS data (e.g. into May 2026).
+function monthRangeFromDailyRange(dsi,dei){
+  if(dsi<0||dei<0||dsi>=DAILY_DATES.length||dei>=DAILY_DATES.length) return [0,MONTHS.length-1];
+  const startYM = DAILY_DATES[dsi].slice(0,6);
+  const endYM = DAILY_DATES[dei].slice(0,6);
+  // si: first month in MONTHS >= startYM (or last month if startYM is past all of MONTHS)
+  let si = MONTHS.findIndex(m => m >= startYM);
+  if(si === -1) si = MONTHS.length - 1;
+  // ei: last month in MONTHS <= endYM (or first month if endYM is before all of MONTHS)
+  let ei = -1;
+  for(let i=MONTHS.length-1;i>=0;i--){if(MONTHS[i] <= endYM){ei=i;break;}}
+  if(ei === -1) ei = 0;
+  if(si > ei) si = ei;
+  return [si, ei];
+}
+
+function ComparisonTab(){
+  // Default daily window: All (full data range, so monthly views work out of the box)
+  const presets = buildPresets();
+  const [dsi,setDsi]=useState(0);
+  const [dei,setDei]=useState(DAILY_EC.length-1);
+  const [mode,setMode]=useState("operator"),[active,setActive]=useState("all");
+  const [opFilter,setOpFilter]=useState("all");
+  // Compare-to (second date range): default to prior-period (same length, immediately before primary)
+  const [compareOn,setCompareOn]=useState(false);
+  const defaultCmpEnd = Math.max(0, dsi-1);
+  const defaultCmpStart = Math.max(0, defaultCmpEnd - (dei-dsi));
+  const [cmpDsi,setCmpDsi]=useState(defaultCmpStart);
+  const [cmpDei,setCmpDei]=useState(defaultCmpEnd);
+  const winDays = dei-dsi+1;
+  const cmpWinDays = cmpDei-cmpDsi+1;
+  const [si,ei] = monthRangeFromDailyRange(dsi,dei);
+  const labels=MONTHS.slice(si,ei+1).map(m=>ML(m));
+  const verticalData=useMemo(()=>{const r={};Object.keys(GROUPS).forEach(g=>{r[g]=MONTHS.map((_,mi)=>HOST_KEYS.filter(k=>HOSTS[k].group===g).reduce((a,k)=>a+(HOSTS[k].data[mi]||0),0));});return r;},[]);
+  const isOperator = mode==="operator";
+
+  // For Category trend: aggregate PROD_DAILY into per-category daily totals across the picked window
+  const catDailyTotals = useMemo(()=>{
+    if(mode!=="product") return null;
+    const r={};
+    PRODUCT_KEYS.forEach(k=>r[k]=0);
+    OPERATORS.forEach(o=>{
+      const sum = prodSum(o.n, dsi, dei);
+      if(r[o.c]!==undefined) r[o.c]+=sum;
+    });
+    return r;
+  },[mode,dsi,dei]);
+  // For chart: per-category daily series (downsampled to daily) — pass through PROD_DAILY agg
+  const catDailySeries = useMemo(()=>{
+    if(mode!=="product") return null;
+    const series={};
+    PRODUCT_KEYS.forEach(k=>{series[k]=new Array(dei-dsi+1).fill(0);});
+    OPERATORS.forEach(o=>{
+      const arr = PROD_DAILY[o.n]; if(!arr) return;
+      for(let i=dsi;i<=dei;i++){
+        if(series[o.c]) series[o.c][i-dsi]+=(arr[i]||0);
+      }
+    });
+    return series;
+  },[mode,dsi,dei]);
+
+  const keys=mode==="product"?PRODUCT_KEYS:(mode==="vertical"?Object.keys(GROUPS):[]);
+  const info=mode==="product"?PRODUCTS:GROUPS;
+  const data=mode==="product"?Object.fromEntries(PRODUCT_KEYS.map(k=>[k,PRODUCTS[k].data])):verticalData;
+  // For vertical mode: per-vertical daily series built from HOST_DAILY (groups hosts by HOSTS[k].group).
+  // "all" = total affiliate clicks in window (from DAILY_EC, authoritative). "other" = residual
+  // (clicks from hosts not tracked in HOST_DAILY — only 20 hosts are tracked).
+  const verticalDailySeries = useMemo(()=>{
+    if(mode!=="vertical") return null;
+    const len = dei-dsi+1;
+    const series={}; Object.keys(GROUPS).forEach(g=>series[g]=new Array(len).fill(0));
+    series.other=new Array(len).fill(0);
+    HOST_KEYS.forEach(k => {
+      const info = HOSTS[k];
+      const arr = HOST_DAILY[info.host];
+      if(!arr) return;
+      for(let i=dsi; i<=dei && i<arr.length; i++){
+        if(series[info.group]) series[info.group][i-dsi] += (arr[i]||0);
+      }
+    });
+    // "other" = DAILY_EC[i] - sum(tracked verticals at i)
+    for(let i=dsi;i<=dei;i++){
+      const tracked = Object.keys(GROUPS).reduce((a,g)=>a+series[g][i-dsi],0);
+      series.other[i-dsi] = Math.max(0, (DAILY_EC[i]||0) - tracked);
+    }
+    return series;
+  },[mode,dsi,dei]);
+  const verticalTotals = useMemo(()=>{
+    if(mode!=="vertical" || !verticalDailySeries) return null;
+    const r={};
+    Object.keys(GROUPS).forEach(g=>r[g]=verticalDailySeries[g].reduce((a,b)=>a+b,0));
+    r.other = verticalDailySeries.other.reduce((a,b)=>a+b,0);
+    // ALL = sum of DAILY_EC in the window (authoritative total)
+    let total=0; for(let i=dsi;i<=dei;i++) total += (DAILY_EC[i]||0);
+    r.all = total;
+    return r;
+  },[mode,dsi,dei,verticalDailySeries]);
+
+  // Comparison-period totals (computed only when compareOn). Same shape as verticalTotals/catDailyTotals.
+  const cmpVerticalTotals = useMemo(()=>{
+    if(!compareOn || mode!=="vertical") return null;
+    const r={}; Object.keys(GROUPS).forEach(g=>r[g]=0); r.other=0;
+    HOST_KEYS.forEach(k=>{
+      const info=HOSTS[k]; const arr=HOST_DAILY[info.host]; if(!arr) return;
+      let sum=0; for(let i=cmpDsi;i<=cmpDei && i<arr.length;i++) sum+=(arr[i]||0);
+      if(r[info.group]!==undefined) r[info.group]+=sum;
+    });
+    let all=0; for(let i=cmpDsi;i<=cmpDei;i++) all+=(DAILY_EC[i]||0);
+    r.all=all;
+    const tracked=Object.keys(GROUPS).reduce((a,g)=>a+r[g],0);
+    r.other=Math.max(0, all-tracked);
+    return r;
+  },[compareOn,mode,cmpDsi,cmpDei]);
+  const cmpCatTotals = useMemo(()=>{
+    if(!compareOn || mode!=="product") return null;
+    const r={}; PRODUCT_KEYS.forEach(k=>r[k]=0);
+    OPERATORS.forEach(o=>{
+      const sum=prodSum(o.n,cmpDsi,cmpDei);
+      if(r[o.c]!==undefined) r[o.c]+=sum;
+    });
+    return r;
+  },[compareOn,mode,cmpDsi,cmpDei]);
+  // Comparison-period daily series (for chart overlay)
+  const cmpVerticalDailySeries = useMemo(()=>{
+    if(!compareOn || mode!=="vertical") return null;
+    const len=cmpDei-cmpDsi+1;
+    const series={}; Object.keys(GROUPS).forEach(g=>series[g]=new Array(len).fill(0));
+    series.other=new Array(len).fill(0);
+    HOST_KEYS.forEach(k=>{
+      const info=HOSTS[k]; const arr=HOST_DAILY[info.host]; if(!arr) return;
+      for(let i=cmpDsi;i<=cmpDei && i<arr.length;i++){
+        if(series[info.group]) series[info.group][i-cmpDsi]+=(arr[i]||0);
+      }
+    });
+    for(let i=cmpDsi;i<=cmpDei;i++){
+      const tracked=Object.keys(GROUPS).reduce((a,g)=>a+series[g][i-cmpDsi],0);
+      series.other[i-cmpDsi]=Math.max(0,(DAILY_EC[i]||0)-tracked);
+    }
+    return series;
+  },[compareOn,mode,cmpDsi,cmpDei]);
+  const cmpCatDailySeries = useMemo(()=>{
+    if(!compareOn || mode!=="product") return null;
+    const series={}; PRODUCT_KEYS.forEach(k=>{series[k]=new Array(cmpDei-cmpDsi+1).fill(0);});
+    OPERATORS.forEach(o=>{
+      const arr=PROD_DAILY[o.n]; if(!arr) return;
+      for(let i=cmpDsi;i<=cmpDei;i++){
+        if(series[o.c]) series[o.c][i-cmpDsi]+=(arr[i]||0);
+      }
+    });
+    return series;
+  },[compareOn,mode,cmpDsi,cmpDei]);
+  // Helper: format delta % with sign + color
+  const deltaPct = (curr,prev)=>{
+    if(!prev) return null;
+    const d=((curr-prev)/prev)*100;
+    return {pct:d, sign:d>=0?"+":"−", abs:Math.abs(d).toFixed(1), color:d>=0?"#15803d":"#b91c1c"};
+  };
+
+  return <div>
+    <RecentActivity/>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"0.75rem",flexWrap:"wrap",gap:8}}>
+      <span style={{fontSize:16,fontWeight:600}}>Comparison — {mode==="product"?"category trend":mode==="vertical"?"by content vertical":"product breakdown + projections"}</span>
+      <span style={{fontSize:12,color:"#6b7280"}}>{fmtFull(dsi)} → {fmtFull(dei)} ({winDays}d)</span>
+    </div>
+
+    {/* Shared date picker for all Comparison modes */}
+    <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"1rem",marginBottom:"1rem",display:"flex",flexDirection:"column",gap:10}}>
+      <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+        <span style={{fontSize:11,fontWeight:600,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.06em",minWidth:90}}>Date range</span>
+        <DateRangePicker dsi={dsi} dei={dei} onChange={(a,b)=>{
+          setDsi(a);setDei(b);
+          // Auto-shift compare to prior period of same length unless user already moved it
+          const prevLen=cmpDei-cmpDsi;
+          if(prevLen===(dei-dsi)){
+            const newCmpEnd=Math.max(0,a-1);
+            const newCmpStart=Math.max(0,newCmpEnd-(b-a));
+            setCmpDsi(newCmpStart);setCmpDei(newCmpEnd);
+          }
+        }} presets={presets}/>
+        <span style={{fontSize:12,color:"#9ca3af"}}>{winDays} day{winDays!==1?"s":""}</span>
+        <button
+          onClick={()=>setCompareOn(!compareOn)}
+          style={{
+            marginLeft:"auto",
+            display:"flex",alignItems:"center",gap:6,
+            padding:"8px 14px",
+            fontSize:13,fontWeight:600,
+            border:compareOn?"1px solid #9333ea":"1px solid #d1d5db",
+            borderRadius:8,
+            background:compareOn?"#9333ea":"white",
+            color:compareOn?"white":"#374151",
+            cursor:"pointer",
+            transition:"all 0.15s"
+          }}
+        >
+          <span style={{fontSize:14}}>{compareOn?"✓":"⇄"}</span>
+          {compareOn?"Comparing two periods":"Compare two periods"}
+        </button>
+      </div>
+      {compareOn && <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap",paddingTop:10,borderTop:"2px solid #f3e8ff",background:"linear-gradient(to right,#faf5ff,white)",margin:"0 -1rem -1rem",padding:"12px 1rem"}}>
+        <span style={{fontSize:11,fontWeight:700,color:"#9333ea",textTransform:"uppercase",letterSpacing:"0.06em",minWidth:90}}>Compare to</span>
+        <DateRangePicker dsi={cmpDsi} dei={cmpDei} onChange={(a,b)=>{setCmpDsi(a);setCmpDei(b);}} presets={presets}/>
+        <span style={{fontSize:12,color:"#9333ea",fontWeight:500}}>{cmpWinDays} day{cmpWinDays!==1?"s":""}{cmpWinDays!==winDays?` · ⚠ different length (${winDays}d vs ${cmpWinDays}d)`:""}</span>
+        <button onClick={()=>setCompareOn(false)} style={{marginLeft:"auto",padding:"4px 10px",fontSize:11,border:"1px solid #d1d5db",borderRadius:6,background:"white",cursor:"pointer",color:"#6b7280"}}>Close</button>
+      </div>}
+    </div>
+
+    <div style={{display:"flex",gap:6,marginBottom:"1rem",flexWrap:"wrap"}}>
+      <button onClick={()=>{setMode("operator");}} style={btnStyle(mode==="operator")}>Product breakdown + projections</button>
+      <button onClick={()=>{setMode("product");setActive("all");}} style={btnStyle(mode==="product")}>Category trend</button>
+      <button onClick={()=>{setMode("vertical");setActive("all");}} style={btnStyle(mode==="vertical")}>By vertical</button>
+    </div>
+    {mode==="product" && <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,padding:"0.65rem 1rem",marginBottom:"1rem",fontSize:12,color:"#1e40af"}}>
+      Categories come from GA4 <code style={{background:"#dbeafe",padding:"1px 4px",borderRadius:3}}>customEvent:product</code> — each click is tagged with its specific product (e.g. "BetMGM Sports" vs "BetMGM Casino"), then mapped to a category per Michael's spec. Chart and totals respond to the date range above.
+    </div>}
+    {/* Category cards — for Category trend mode (daily-aggregated) */}
+    {mode==="product" && <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:8,marginBottom:"1rem"}}>
+      {(()=>{
+        const total = Object.values(catDailyTotals||{}).reduce((a,b)=>a+b,0);
+        const cmpTotal = compareOn && cmpCatTotals ? Object.values(cmpCatTotals).reduce((a,b)=>a+b,0) : 0;
+        return [["all","All","#888780",null],...PRODUCT_KEYS.map(k=>[k,PRODUCTS[k].label,PRODUCTS[k].color,catDailySeries?catDailySeries[k]:null])].map(([key,label,color,spark])=>{
+          const tot = key==="all" ? total : (catDailyTotals?catDailyTotals[key]:0);
+          const cmpTot = compareOn ? (key==="all" ? cmpTotal : (cmpCatTotals?.[key]||0)) : null;
+          const d = compareOn ? deltaPct(tot, cmpTot) : null;
+          const act = active===key;
+          return <button key={key} onClick={()=>setActive(key)} style={{display:"flex",flexDirection:"column",gap:3,textAlign:"left",cursor:"pointer",padding:"0.65rem 0.75rem",borderRadius:8,background:act?"white":"#f9fafb",border:act?`2px solid ${color}`:"1px solid #e5e7eb"}}>
+            <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:6,height:6,borderRadius:"50%",background:color}}/><span style={{fontSize:10,fontWeight:500,color:act?color:"#6b7280",textTransform:"uppercase"}}>{label}</span></div>
+            <span style={{fontSize:17,fontWeight:600,color:act?color:"#111"}}>{fN(tot)}</span>
+            <span style={{fontSize:10,color:"#9ca3af"}}>{fP(tot,total)}</span>
+            {compareOn && <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#6b7280"}}>
+              <span>vs {fN(cmpTot)}</span>
+              {d && <span style={{color:d.color,fontWeight:600}}>{d.sign}{d.abs}%</span>}
+            </div>}
+            {spark&&spark.length>=2&&<MiniLine data={spark} color={color} h={22}/>}
+          </button>;
+        });
+      })()}
+    </div>}
+    {/* Vertical cards */}
+    {mode==="vertical" && <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:8,marginBottom:"1rem"}}>
+      {[
+        ["all","All","#111827",null],
+        ...Object.keys(GROUPS).map(k=>[k,GROUPS[k].label,GROUPS[k].color,verticalDailySeries?.[k]]),
+        ["other","Other / untracked","#9ca3af",verticalDailySeries?.other],
+      ].map(([key,label,color,spark])=>{
+        const tot = key==="all" ? (verticalTotals?.all||0) : (verticalTotals?.[key]||0);
+        const cmpTot = compareOn ? (key==="all" ? (cmpVerticalTotals?.all||0) : (cmpVerticalTotals?.[key]||0)) : null;
+        const d = compareOn ? deltaPct(tot, cmpTot) : null;
+        const act = active===key;
+        return <button key={key} onClick={()=>setActive(key)} style={{display:"flex",flexDirection:"column",gap:3,textAlign:"left",cursor:"pointer",padding:"0.65rem 0.75rem",borderRadius:8,background:act?"white":"#f9fafb",border:act?`2px solid ${color}`:"1px solid #e5e7eb"}}>
+          <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:6,height:6,borderRadius:"50%",background:color}}/><span style={{fontSize:10,fontWeight:500,color:act?color:"#6b7280",textTransform:"uppercase"}}>{label}</span></div>
+          <span style={{fontSize:17,fontWeight:600,color:act?color:"#111"}}>{fN(tot)}</span>
+          <span style={{fontSize:10,color:"#9ca3af"}}>{fP(tot,verticalTotals?.all||1)}</span>
+          {compareOn && <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#6b7280"}}>
+            <span>vs {fN(cmpTot)}</span>
+            {d && <span style={{color:d.color,fontWeight:600}}>{d.sign}{d.abs}%</span>}
+          </div>}
+          {spark&&spark.length>=2&&<MiniLine data={spark} color={color} h={22}/>}
+        </button>;
+      })}
+    </div>}
+    {/* Trend chart for Category trend mode (daily series) */}
+    {mode==="product" && <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"1.25rem"}}>
+      <p style={{margin:"0 0 0.75rem",fontSize:11,fontWeight:500,color:"#6b7280",textTransform:"uppercase",display:"flex",alignItems:"center",gap:8}}>
+        <span>{active==="all"?"All categories":PRODUCTS[active]?.label} — daily affiliate clicks</span>
+        {compareOn && <span style={{color:"#9333ea",fontSize:10,fontWeight:600}}>· solid = {fmtFull(dsi)} → {fmtFull(dei)} · dashed = {fmtFull(cmpDsi)} → {fmtFull(cmpDei)}</span>}
+      </p>
+      {(()=>{
+        const slices = active==="all" ? PRODUCT_KEYS.map(k=>catDailySeries?.[k]||[]) : [catDailySeries?.[active]||[]];
+        const colors = active==="all" ? PRODUCT_KEYS.map(k=>PRODUCTS[k].color) : [PRODUCTS[active]?.color||"#888"];
+        const cmpSlices = compareOn && cmpCatDailySeries ? (active==="all" ? PRODUCT_KEYS.map(k=>cmpCatDailySeries[k]||[]) : [cmpCatDailySeries[active]||[]]) : null;
+        const cmpCols = cmpSlices ? colors : null;
+        const lbls = [];
+        for(let i=0;i<=dei-dsi;i++) lbls.push(DL(DAILY_DATES[dsi+i]));
+        return <TrendChartSimple slices={slices} colors={colors} labels={lbls} h={220} compareSlices={cmpSlices} compareColors={cmpCols}/>;
+      })()}
+    </div>}
+    {/* Trend chart for By vertical mode (daily series from HOST_DAILY) */}
+    {mode==="vertical" && <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"1.25rem"}}>
+      <p style={{margin:"0 0 0.75rem",fontSize:11,fontWeight:500,color:"#6b7280",textTransform:"uppercase",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+        <span>{active==="all"?"All verticals":(GROUPS[active]?.label||(active==="other"?"Other / untracked":""))} — daily affiliate clicks · {fmtFull(dsi)} → {fmtFull(dei)}</span>
+        {compareOn && <span style={{color:"#9333ea",fontSize:10,fontWeight:600}}>· dashed = {fmtFull(cmpDsi)} → {fmtFull(cmpDei)}</span>}
+      </p>
+      {(()=>{
+        const groupKeys = [...Object.keys(GROUPS), "other"];
+        const slices = active==="all"
+          ? groupKeys.map(k=>verticalDailySeries?.[k]||[])
+          : [verticalDailySeries?.[active]||[]];
+        const colors = active==="all"
+          ? groupKeys.map(k=>k==="other"?"#9ca3af":GROUPS[k].color)
+          : [active==="other"?"#9ca3af":(GROUPS[active]?.color||"#888")];
+        const cmpSlices = compareOn && cmpVerticalDailySeries
+          ? (active==="all" ? groupKeys.map(k=>cmpVerticalDailySeries[k]||[]) : [cmpVerticalDailySeries[active]||[]])
+          : null;
+        const lbls=[]; for(let i=0;i<=dei-dsi;i++) lbls.push(DL(DAILY_DATES[dsi+i]));
+        return <TrendChartSimple slices={slices} colors={colors} labels={lbls} h={220} compareSlices={cmpSlices} compareColors={cmpSlices?colors:null}/>;
+      })()}
+    </div>}
+    {isOperator && <OperatorView opFilter={opFilter} setOpFilter={setOpFilter} dsi={dsi} dei={dei} setDsi={setDsi} setDei={setDei} presets={presets}/>}
+  </div>;
+}
+
+// Days remaining in the current month (Jun 2026 = 30 days)
+const MAY_DAYS = D.daysInMonth;
+const MAY_DAYS_ELAPSED = D.daysElapsed;
+// Find indices in DAILY_DATES for the start of months we care about
+const FIRST_OF_MONTH_IDX = (()=>{
+  const r={};
+  DAILY_DATES.forEach((d,i)=>{const ym=d.slice(0,6);if(!(ym in r)) r[ym]=i;});
+  return r;
+})();
+
+// Compute clicks for a single product in [dsi, dei] inclusive
+function prodSum(prodName, dsi, dei){
+  const arr = PROD_DAILY[prodName];
+  if(!arr) return 0;
+  let t=0; for(let i=dsi;i<=dei;i++) t+=arr[i]||0;
+  return t;
+}
+
+// ─── GA-style date range picker ──────────────────────────────────────────────
+// Helper: index in DAILY_DATES → JS Date
+function idxToDate(i){const s=DAILY_DATES[i];return new Date(parseInt(s.slice(0,4)),parseInt(s.slice(4,6))-1,parseInt(s.slice(6,8)));}
+function dateToIdx(d){const ymd=`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;return DAILY_DATES.indexOf(ymd);}
+function fmtFull(i){if(i<0||i>=DAILY_DATES.length)return"";const d=idxToDate(i);return `${MO[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;}
+function daysInMonth(y,m){return new Date(y,m+1,0).getDate();}
+function monthGrid(y,m){
+  // Returns array of 42 cells (6 weeks × 7 days). Each cell = {date: Date, idx: int|null, inMonth: bool}
+  const first = new Date(y,m,1);
+  const startDow = first.getDay();  // 0=Sun
+  const dim = daysInMonth(y,m);
+  const cells = [];
+  // Previous month tail
+  const prevDim = daysInMonth(y, m-1);
+  for(let i=startDow-1;i>=0;i--){
+    const d=new Date(y,m-1,prevDim-i);
+    cells.push({date:d, idx:dateToIdx(d), inMonth:false});
+  }
+  // This month
+  for(let day=1;day<=dim;day++){
+    const d=new Date(y,m,day);
+    cells.push({date:d, idx:dateToIdx(d), inMonth:true});
+  }
+  // Next month head to fill 42
+  let nd=1;
+  while(cells.length<42){
+    const d=new Date(y,m+1,nd++);
+    cells.push({date:d, idx:dateToIdx(d), inMonth:false});
+  }
+  return cells;
+}
+
+function DateRangePicker({dsi,dei,onChange,presets}){
+  const [open,setOpen]=useState(false);
+  const [tStart,setTStart]=useState(dsi);
+  const [tEnd,setTEnd]=useState(dei);
+  const [hover,setHover]=useState(null);
+  const [picking,setPicking]=useState("end");  // "start" or "end"
+  // Left calendar viewing year/month — default to month of dei
+  const initDate=idxToDate(dei);
+  const [viewY,setViewY]=useState(initDate.getFullYear());
+  const [viewM,setViewM]=useState(initDate.getMonth());
+
+  // When opening, reset temp range to committed values
+  function toggle(){
+    if(!open){setTStart(dsi);setTEnd(dei);setPicking("start");}
+    setOpen(!open);
+  }
+  function apply(){
+    const a=Math.min(tStart,tEnd), b=Math.max(tStart,tEnd);
+    onChange(a,b); setOpen(false);
+  }
+  function cancel(){setOpen(false);}
+  function applyPreset(p){
+    setTStart(p.start); setTEnd(p.end);
+    const d=idxToDate(p.end); setViewY(d.getFullYear()); setViewM(d.getMonth());
+  }
+  function handleDayClick(idx){
+    if(idx===null||idx<0)return;
+    if(picking==="start"){setTStart(idx);setTEnd(idx);setPicking("end");}
+    else{
+      if(idx<tStart){setTEnd(tStart);setTStart(idx);}
+      else setTEnd(idx);
+      setPicking("start");
+    }
+  }
+  function navMonth(delta){
+    let y=viewY, m=viewM+delta;
+    while(m<0){m+=12;y--;} while(m>11){m-=12;y++;}
+    setViewY(y); setViewM(m);
+  }
+  // For range hover preview
+  const rangeStart=Math.min(tStart,tEnd);
+  const rangeEnd=Math.max(tStart,tEnd);
+  const hoverStart = (picking==="end" && hover!==null) ? Math.min(tStart,hover) : null;
+  const hoverEnd   = (picking==="end" && hover!==null) ? Math.max(tStart,hover) : null;
+  function cellStyle(cell){
+    const i=cell.idx;
+    const inRange = i!==null && i>=rangeStart && i<=rangeEnd;
+    const inHover = hoverStart!==null && i!==null && i>=hoverStart && i<=hoverEnd;
+    const isStart = i===rangeStart && i!==null;
+    const isEnd = i===rangeEnd && i!==null;
+    const isToday = i===DAILY_EC.length-1;
+    return {
+      width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",
+      fontSize:12, cursor:i!==null?"pointer":"default",
+      color: !cell.inMonth ? "#d1d5db" : (isStart||isEnd ? "white" : inRange ? "#1d4ed8" : "#111"),
+      background: (isStart||isEnd) ? "#2563eb" : (inRange||inHover) ? "#dbeafe" : "transparent",
+      borderRadius: (isStart||isEnd) ? "50%" : 0,
+      fontWeight: isStart||isEnd||isToday ? 600 : 400,
+      border: isToday && !(isStart||isEnd) ? "1px solid #2563eb" : "1px solid transparent",
+    };
+  }
+  function MonthCalendar({y,m}){
+    const cells=monthGrid(y,m);
+    return <div style={{display:"flex",flexDirection:"column",gap:2}}>
+      <div style={{textAlign:"center",fontSize:13,fontWeight:600,marginBottom:6,color:"#111"}}>{MO[m]} {y}</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:1}}>
+        {["S","M","T","W","T","F","S"].map((d,i)=><div key={i} style={{textAlign:"center",fontSize:10,color:"#9ca3af",padding:"4px 0"}}>{d}</div>)}
+        {cells.map((cell,i)=>{
+          const s=cellStyle(cell);
+          return <div key={i}
+            onClick={()=>cell.inMonth&&handleDayClick(cell.idx)}
+            onMouseEnter={()=>cell.inMonth&&cell.idx!==null&&setHover(cell.idx)}
+            onMouseLeave={()=>setHover(null)}
+            style={s}>{cell.date.getDate()}</div>;
+        })}
+      </div>
+    </div>;
+  }
+
+  const triggerLabel = `${fmtFull(dsi)}  →  ${fmtFull(dei)}`;
+
+  return <div style={{position:"relative",display:"inline-block"}}>
+    <button onClick={toggle} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",border:"1px solid #d1d5db",borderRadius:8,background:"white",cursor:"pointer",fontSize:13,minWidth:280}}>
+      <span style={{fontSize:14}}>📅</span>
+      <span style={{color:"#111",fontWeight:500}}>{triggerLabel}</span>
+      <span style={{marginLeft:"auto",color:"#9ca3af"}}>▾</span>
+    </button>
+    {open && <>
+      <div onClick={cancel} style={{position:"fixed",inset:0,zIndex:50,background:"transparent"}}/>
+      <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,zIndex:51,background:"white",border:"1px solid #e5e7eb",borderRadius:12,boxShadow:"0 10px 25px rgba(0,0,0,0.12)",padding:"1rem",display:"flex",gap:"1.25rem",minWidth:640}}>
+        {/* Presets sidebar */}
+        <div style={{display:"flex",flexDirection:"column",gap:4,borderRight:"1px solid #f3f4f6",paddingRight:"1rem",minWidth:130}}>
+          <div style={{fontSize:10,color:"#9ca3af",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:4,fontWeight:500}}>Quick ranges</div>
+          {presets.map(p=>{const active=tStart===p.start&&tEnd===p.end;return <button key={p.label} onClick={()=>applyPreset(p)} style={{padding:"6px 10px",fontSize:12,textAlign:"left",border:"none",borderRadius:6,background:active?"#eff6ff":"transparent",color:active?"#1d4ed8":"#374151",cursor:"pointer",fontWeight:active?500:400}}>{p.label}</button>;})}
+        </div>
+        {/* Calendar pair */}
+        <div style={{flex:1}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+            <button onClick={()=>navMonth(-1)} style={{background:"transparent",border:"1px solid #e5e7eb",borderRadius:6,width:28,height:28,cursor:"pointer",fontSize:14}}>◀</button>
+            <div style={{display:"flex",gap:8,fontSize:11,color:"#6b7280"}}>
+              <span><strong style={{color:"#111"}}>{fmtFull(tStart)}</strong></span>
+              <span>→</span>
+              <span><strong style={{color:"#111"}}>{fmtFull(tEnd)}</strong></span>
+              <span style={{color:"#9ca3af"}}>· {Math.abs(tEnd-tStart)+1} days</span>
+            </div>
+            <button onClick={()=>navMonth(1)} style={{background:"transparent",border:"1px solid #e5e7eb",borderRadius:6,width:28,height:28,cursor:"pointer",fontSize:14}}>▶</button>
+          </div>
+          <div style={{display:"flex",gap:"1.5rem"}}>
+            <MonthCalendar y={viewY} m={viewM}/>
+            <MonthCalendar y={viewM===11?viewY+1:viewY} m={(viewM+1)%12}/>
+          </div>
+          <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:12,borderTop:"1px solid #f3f4f6",paddingTop:10}}>
+            <button onClick={cancel} style={{padding:"6px 14px",fontSize:12,border:"1px solid #e5e7eb",background:"white",color:"#374151",borderRadius:6,cursor:"pointer"}}>Cancel</button>
+            <button onClick={apply} style={{padding:"6px 14px",fontSize:12,border:"none",background:"#2563eb",color:"white",borderRadius:6,cursor:"pointer",fontWeight:500}}>Apply</button>
+          </div>
+        </div>
+      </div>
+    </>}
+  </div>;
+}
+
+function OperatorView({opFilter,setOpFilter,dsi,dei,setDsi,setDei,presets}){
+  // Window state lifted to parent; we still derive month-boundary indexes for MTD/Apr columns
+  const mtdStart = FIRST_OF_MONTH_IDX["202606"] || (DAILY_EC.length - MAY_DAYS_ELAPSED);
+  const aprStart = FIRST_OF_MONTH_IDX["202605"] || (DAILY_EC.length - MAY_DAYS_ELAPSED - 31);
+  const [sortBy, setSortBy] = useState("proj");  // "proj" or "window"
+  const winDays = dei - dsi + 1;
+
+  // Filter by category (driven by the chips at top of view)
+  const filtered = opFilter==="all" ? OPERATORS : OPERATORS.filter(o => o.c===opFilter);
+  const JUN_DAYS = 30, JUL_DAYS = 31, AUG_DAYS = 31;
+  const rows = filtered.map(o=>{
+    const winTotal = prodSum(o.n, dsi, dei);
+    const winAvg = winDays>0 ? winTotal/winDays : 0;
+    const aprTotal = prodSum(o.n, aprStart, mtdStart-1);
+    const mtdTotal = prodSum(o.n, mtdStart, DAILY_EC.length-1);
+    // End-of-Jun projection (current month context)
+    const projMay = MAY_DAYS_ELAPSED>0 ? Math.round((mtdTotal/MAY_DAYS_ELAPSED)*MAY_DAYS) : 0;
+    // Next 3 full months use trailing-30 daily avg × days in each month
+    const trailing30Avg = prodSum(o.n, Math.max(0,DAILY_EC.length-30), DAILY_EC.length-1)/30;
+    const projJun = Math.round(trailing30Avg * JUN_DAYS);
+    const projJul = Math.round(trailing30Avg * JUL_DAYS);
+    const projAug = Math.round(trailing30Avg * AUG_DAYS);
+    const threeMoTotal = projJun + projJul + projAug;   // next 3 full months
+    const momPct = aprTotal>0 ? ((projMay - aprTotal)/aprTotal*100) : null;
+    // Trend signal: compare trailing-30 vs prior-30 daily avg
+    const prior30Avg = prodSum(o.n, Math.max(0,DAILY_EC.length-60), Math.max(0,DAILY_EC.length-31))/30;
+    const trendPct = prior30Avg>0 ? ((trailing30Avg - prior30Avg)/prior30Avg*100) : null;
+    return {...o, winTotal, winAvg, aprTotal, mtdTotal, projMay, projJun, projJul, projAug, threeMoTotal, momPct, trendPct, trailing30Avg};
+  });
+  const sortKey = sortBy==="proj" ? "projMay" : sortBy==="window" ? "winTotal" : "threeMoTotal";
+  rows.sort((a,b)=> b[sortKey] - a[sortKey]);
+
+  // Category totals — picker-driven window + fixed MTD/projection columns
+  const totalsByCat = PRODUCT_KEYS.reduce((acc,k)=>{
+    acc[k]={win:0,mtd:0,projMay:0,aprTotal:0,projJun:0,projJul:0,projAug:0,threeMo:0};
+    OPERATORS.forEach(o=>{if(o.c===k){
+      const w = prodSum(o.n, dsi, dei);
+      const mt=prodSum(o.n, mtdStart, DAILY_EC.length-1);
+      const apr=prodSum(o.n, aprStart, mtdStart-1);
+      const pmay = MAY_DAYS_ELAPSED>0 ? Math.round((mt/MAY_DAYS_ELAPSED)*MAY_DAYS) : 0;
+      const t30 = prodSum(o.n, Math.max(0,DAILY_EC.length-30), DAILY_EC.length-1)/30;
+      const pjun = Math.round(t30 * 30);
+      const pjul = Math.round(t30 * 31);
+      const paug = Math.round(t30 * 31);
+      acc[k].win+=w;
+      acc[k].mtd+=mt;
+      acc[k].aprTotal+=apr;
+      acc[k].projMay+=pmay;
+      acc[k].projJun+=pjun;
+      acc[k].projJul+=pjul;
+      acc[k].projAug+=paug;
+      acc[k].threeMo+=pjun+pjul+paug;
+    }});
+    return acc;
+  },{});
+  const grandWin=Object.values(totalsByCat).reduce((a,t)=>a+t.win,0);
+  const grandMtd=Object.values(totalsByCat).reduce((a,t)=>a+t.mtd,0);
+  const grandProjMay=Object.values(totalsByCat).reduce((a,t)=>a+t.projMay,0);
+  const grandApr=Object.values(totalsByCat).reduce((a,t)=>a+t.aprTotal,0);
+  const grand3mo=Object.values(totalsByCat).reduce((a,t)=>a+t.threeMo,0);
+  const grandProjJun=Object.values(totalsByCat).reduce((a,t)=>a+t.projJun,0);
+  const grandProjJul=Object.values(totalsByCat).reduce((a,t)=>a+t.projJul,0);
+  const grandProjAug=Object.values(totalsByCat).reduce((a,t)=>a+t.projAug,0);
+
+  // Check if window covers the full current month (MTD) — used to suppress redundancy
+  const winIsMTD = (dsi===mtdStart && dei===DAILY_EC.length-1);
+  const windowLabel = winIsMTD ? "MTD" : `${winDays}d window`;
+
+  return <div>
+    {/* Category chips — primary value follows the date-range picker (was MTD-only, didn't respond) */}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:6,marginBottom:"1rem"}}>
+      <button onClick={()=>setOpFilter("all")} style={{display:"flex",flexDirection:"column",gap:3,textAlign:"left",padding:"0.7rem 0.9rem",borderRadius:8,background:opFilter==="all"?"white":"#f9fafb",border:opFilter==="all"?"2px solid #111827":"1px solid #e5e7eb",cursor:"pointer"}}>
+        <span style={{fontSize:10,fontWeight:500,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.05em"}}>All products</span>
+        <span style={{fontSize:18,fontWeight:700}}>{fN(grandWin)}</span>
+        <span style={{fontSize:10,color:"#9ca3af"}}>{windowLabel} · <strong style={{color:"#111"}}>{(grandWin/Math.max(1,winDays)).toFixed(0)}</strong>/day</span>
+        <div style={{fontSize:10,color:"#6b7280",borderTop:"1px solid #f3f4f6",paddingTop:4,marginTop:2}}>MTD <strong style={{color:"#111"}}>{fN(grandMtd)}</strong> · proj Jun <strong style={{color:"#111"}}>{fN(grandProjMay)}</strong></div>
+        <div style={{fontSize:10,color:"#6b7280",marginTop:2}}>Jun <strong style={{color:"#111"}}>{fN(grandProjJun)}</strong> · Jul <strong style={{color:"#111"}}>{fN(grandProjJul)}</strong> · Aug <strong style={{color:"#111"}}>{fN(grandProjAug)}</strong></div>
+      </button>
+      {PRODUCT_KEYS.map(k=>{const a=opFilter===k,info=PRODUCTS[k],t=totalsByCat[k];
+        const mayVsApr = t.aprTotal>0 ? ((t.projMay-t.aprTotal)/t.aprTotal*100) : null;
+        return <button key={k} onClick={()=>setOpFilter(k)} style={{display:"flex",flexDirection:"column",gap:3,textAlign:"left",padding:"0.7rem 0.9rem",borderRadius:8,background:a?"white":"#f9fafb",border:a?`2px solid ${info.color}`:"1px solid #e5e7eb",cursor:"pointer"}}>
+        <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:6,height:6,borderRadius:"50%",background:info.color}}/><span style={{fontSize:10,fontWeight:500,color:a?info.color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.05em"}}>{info.label}</span></div>
+        <span style={{fontSize:18,fontWeight:700,color:a?info.color:"#111"}}>{fN(t.win)}</span>
+        <span style={{fontSize:10,color:"#9ca3af"}}>{windowLabel} · <strong style={{color:info.color}}>{(t.win/Math.max(1,winDays)).toFixed(0)}</strong>/day</span>
+        <div style={{fontSize:10,color:"#6b7280",borderTop:"1px solid #f3f4f6",paddingTop:4,marginTop:2}}>MTD <strong>{fN(t.mtd)}</strong> · proj Jun <strong style={{color:info.color}}>{fN(t.projMay)}</strong> {mayVsApr!==null&&<PctBadge pct={mayVsApr}/>}</div>
+        <div style={{fontSize:10,color:"#6b7280",marginTop:2}}>Jun <strong style={{color:info.color}}>{fN(t.projJun)}</strong> · Jul <strong style={{color:info.color}}>{fN(t.projJul)}</strong> · Aug <strong style={{color:info.color}}>{fN(t.projAug)}</strong></div>
+      </button>;})}
+    </div>
+
+    {/* Dedicated current-month projection summary — visible all the time at the top of breakdown view */}
+    <div style={{background:"linear-gradient(135deg,#fef3c7 0%,#fffbeb 100%)",border:"1.5px solid #fbbf24",borderRadius:12,padding:"1rem 1.25rem",marginBottom:"1rem"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"0.65rem"}}>
+        <span style={{fontSize:11,fontWeight:700,color:"#92400e",textTransform:"uppercase",letterSpacing:"0.07em"}}>Current month projection — Jun 2026 (end of month)</span>
+        <span style={{fontSize:10,color:"#a16207"}}>linear MTD-pace, {MAY_DAYS_ELAPSED}/{MAY_DAYS} days elapsed</span>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:8}}>
+        <div style={{background:"white",borderRadius:8,padding:"0.6rem 0.85rem",border:"1px solid #fde68a"}}>
+          <div style={{fontSize:10,color:"#92400e",textTransform:"uppercase",fontWeight:600,marginBottom:3}}>All categories</div>
+          <div style={{fontSize:20,fontWeight:800,color:"#D85A30"}}>{fN(grandProjMay)}</div>
+          <div style={{fontSize:10,color:"#9ca3af",marginTop:2}}>MTD {fN(grandMtd)} · May {fN(grandApr)} {grandApr>0&&<PctBadge pct={((grandProjMay-grandApr)/grandApr*100)}/>}</div>
+        </div>
+        {PRODUCT_KEYS.map(k=>{const t=totalsByCat[k],info=PRODUCTS[k];
+          const vsApr = t.aprTotal>0 ? ((t.projMay-t.aprTotal)/t.aprTotal*100) : null;
+          return <div key={k} style={{background:"white",borderRadius:8,padding:"0.6rem 0.85rem",border:"1px solid #fde68a"}}>
+            <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}><div style={{width:6,height:6,borderRadius:"50%",background:info.color}}/><span style={{fontSize:10,color:"#92400e",textTransform:"uppercase",fontWeight:600}}>{info.label}</span></div>
+            <div style={{fontSize:20,fontWeight:800,color:info.color}}>{fN(t.projMay)}</div>
+            <div style={{fontSize:10,color:"#9ca3af",marginTop:2}}>MTD {fN(t.mtd)} · May {fN(t.aprTotal)} {vsApr!==null&&<PctBadge pct={vsApr}/>}</div>
+          </div>;
+        })}
+      </div>
+    </div>
+
+
+    {/* Products table with window + projections */}
+    <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"1.25rem"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"0.75rem",flexWrap:"wrap",gap:10}}>
+        <p style={{margin:0,fontSize:11,fontWeight:500,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.07em"}}>Product breakdown {opFilter!=="all"?`— ${PRODUCTS[opFilter]?.label}`:""} <span style={{color:"#9ca3af",fontWeight:400,textTransform:"none",letterSpacing:0,marginLeft:6}}>({rows.length} {rows.length===1?"product":"products"})</span></p>
+        <div style={{display:"flex",gap:4,alignItems:"center"}}>
+          <span style={{fontSize:11,color:"#6b7280",marginRight:4}}>Sort:</span>
+          <button onClick={()=>setSortBy("proj")} style={btnStyle(sortBy==="proj")}>Proj Jun</button>
+          <button onClick={()=>setSortBy("3mo")} style={btnStyle(sortBy==="3mo")}>3-mo total</button>
+          <button onClick={()=>setSortBy("window")} style={btnStyle(sortBy==="window")}>Window total</button>
+        </div>
+      </div>
+      <div style={{overflowX:"auto",maxHeight:540,overflowY:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:1000}}>
+          <thead>
+            <tr style={{borderBottom:"1px solid #e5e7eb",position:"sticky",top:0,background:"white",zIndex:1}}>
+              <th rowSpan={2} style={{padding:"6px 8px",textAlign:"left",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>#</th>
+              <th rowSpan={2} style={{padding:"6px 8px",textAlign:"left",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>Product</th>
+              <th rowSpan={2} style={{padding:"6px 8px",textAlign:"left",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>Category</th>
+              <th colSpan={2} style={{padding:"4px 8px 2px",textAlign:"center",fontWeight:500,color:"#6b7280",fontSize:10,textTransform:"uppercase",letterSpacing:"0.05em",borderBottom:"1px dashed #e5e7eb"}}>Window</th>
+              <th rowSpan={2} style={{padding:"6px 8px",textAlign:"right",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>MTD</th>
+              <th rowSpan={2} style={{padding:"6px 8px",textAlign:"right",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>May</th>
+              <th rowSpan={2} style={{padding:"6px 8px",textAlign:"right",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>Proj Jun</th>
+              <th colSpan={3} style={{padding:"4px 8px 2px",textAlign:"center",fontWeight:500,color:"#D85A30",fontSize:10,textTransform:"uppercase",letterSpacing:"0.05em",borderBottom:"1px dashed #e5e7eb"}}>3-month forecast (Jun–Aug)</th>
+              <th rowSpan={2} style={{padding:"6px 8px",textAlign:"right",fontWeight:600,color:"#92400e",fontSize:11,textTransform:"uppercase",background:"#fef3c7"}}>3-mo total</th>
+              <th rowSpan={2} style={{padding:"6px 8px",textAlign:"right",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>Trend</th>
+              <th rowSpan={2} style={{padding:"6px 8px",textAlign:"right",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>vs May</th>
+            </tr>
+            <tr style={{borderBottom:"1px solid #e5e7eb",position:"sticky",top:24,background:"white",zIndex:1}}>
+              <th style={{padding:"2px 8px 6px",textAlign:"right",fontWeight:500,color:"#9ca3af",fontSize:10}}>Total</th>
+              <th style={{padding:"2px 8px 6px",textAlign:"right",fontWeight:500,color:"#9ca3af",fontSize:10}}>Avg/d</th>
+              <th style={{padding:"2px 8px 6px",textAlign:"right",fontWeight:500,color:"#D85A30",fontSize:10}}>Jun</th>
+              <th style={{padding:"2px 8px 6px",textAlign:"right",fontWeight:500,color:"#D85A30",fontSize:10}}>Jul</th>
+              <th style={{padding:"2px 8px 6px",textAlign:"right",fontWeight:500,color:"#D85A30",fontSize:10}}>Aug</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((o,i)=>{const cat=PRODUCTS[o.c]||{label:o.c,color:"#888"};
+              return <tr key={o.n} style={{borderBottom:"1px solid #f9fafb"}}>
+                <td style={{padding:"6px 8px",color:"#9ca3af",fontSize:11}}>{i+1}</td>
+                <td style={{padding:"6px 8px",fontWeight:500,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={o.n}>{o.n}{o.o==="auto"&&<span title="auto-categorized — not in your spec list" style={{marginLeft:6,fontSize:10,padding:"1px 5px",borderRadius:3,background:"#fef3c7",color:"#92400e"}}>auto</span>}</td>
+                <td style={{padding:"6px 8px"}}><span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,padding:"2px 7px",borderRadius:99,background:cat.color+"22",color:cat.color}}><span style={{width:5,height:5,borderRadius:"50%",background:cat.color}}/>{cat.label}</span></td>
+                <td style={{padding:"6px 8px",textAlign:"right",fontWeight:500,color:o.winTotal>0?"#111":"#d1d5db"}}>{o.winTotal>0?fN(o.winTotal):"--"}</td>
+                <td style={{padding:"6px 8px",textAlign:"right",color:"#6b7280",fontSize:11}}>{o.winAvg>0?o.winAvg.toFixed(o.winAvg>=10?0:1):"--"}</td>
+                <td style={{padding:"6px 8px",textAlign:"right",color:o.mtdTotal>0?cat.color:"#d1d5db",fontWeight:500}}>{o.mtdTotal>0?fN(o.mtdTotal):"--"}</td>
+                <td style={{padding:"6px 8px",textAlign:"right",color:"#6b7280"}}>{o.aprTotal>0?fN(o.aprTotal):"--"}</td>
+                <td style={{padding:"6px 8px",textAlign:"right",fontWeight:500,color:o.projMay>0?"#6b7280":"#d1d5db"}} title="Linear MTD-pace projection for end of Jun">{o.projMay>0?fN(o.projMay):"--"}</td>
+                <td style={{padding:"6px 8px",textAlign:"right",fontWeight:600,color:o.projJun>0?cat.color:"#d1d5db"}} title="Trailing-30-day avg × 30 days">{o.projJun>0?fN(o.projJun):"--"}</td>
+                <td style={{padding:"6px 8px",textAlign:"right",fontWeight:600,color:o.projJul>0?cat.color:"#d1d5db"}} title="Trailing-30-day avg × 31 days">{o.projJul>0?fN(o.projJul):"--"}</td>
+                <td style={{padding:"6px 8px",textAlign:"right",fontWeight:600,color:o.projAug>0?cat.color:"#d1d5db"}} title="Trailing-30-day avg × 31 days">{o.projAug>0?fN(o.projAug):"--"}</td>
+                <td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:o.threeMoTotal>0?"#92400e":"#d1d5db",background:"#fffbeb"}}>{o.threeMoTotal>0?fN(o.threeMoTotal):"--"}</td>
+                <td style={{padding:"6px 8px",textAlign:"right"}}><PctBadge pct={o.trendPct}/></td>
+                <td style={{padding:"6px 8px",textAlign:"right"}}><PctBadge pct={o.momPct}/></td>
+              </tr>;
+            })}
+            <tr style={{borderTop:"2px solid #e5e7eb",fontWeight:600,background:"#f9fafb"}}>
+              <td colSpan={3} style={{padding:"8px"}}>Total {opFilter!=="all"?`— ${PRODUCTS[opFilter]?.label}`:""}</td>
+              <td style={{padding:"8px",textAlign:"right"}}>{fN(rows.reduce((a,r)=>a+r.winTotal,0))}</td>
+              <td/>
+              <td style={{padding:"8px",textAlign:"right"}}>{fN(rows.reduce((a,r)=>a+r.mtdTotal,0))}</td>
+              <td style={{padding:"8px",textAlign:"right"}}>{fN(rows.reduce((a,r)=>a+r.aprTotal,0))}</td>
+              <td style={{padding:"8px",textAlign:"right",color:"#6b7280"}}>{fN(rows.reduce((a,r)=>a+r.projMay,0))}</td>
+              <td style={{padding:"8px",textAlign:"right"}}>{fN(rows.reduce((a,r)=>a+r.projJun,0))}</td>
+              <td style={{padding:"8px",textAlign:"right"}}>{fN(rows.reduce((a,r)=>a+r.projJul,0))}</td>
+              <td style={{padding:"8px",textAlign:"right"}}>{fN(rows.reduce((a,r)=>a+r.projAug,0))}</td>
+              <td style={{padding:"8px",textAlign:"right",fontWeight:700,color:"#92400e",background:"#fef3c7"}}>{fN(rows.reduce((a,r)=>a+r.threeMoTotal,0))}</td>
+              <td/><td/>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p style={{margin:"0.75rem 0 0",fontSize:11,color:"#9ca3af",lineHeight:1.6}}>
+        <strong>Window total</strong> = clicks in the selected daily window (set by picker above).<br/>
+        <strong>Proj Jun</strong> = linear MTD-pace projection for end of Jun. <strong>Proj Jun/Jul/Aug</strong> = trailing-30-day daily average × days in each month.<br/>
+        <strong>3-mo total</strong> = Jun + Jul + Aug projected clicks (next 3 full months). <strong>Trend</strong> = trailing-30-day avg vs prior-30-day avg. <strong>vs May</strong> = projected Jun vs May actual.<br/>
+        <span style={{background:"#fef3c7",color:"#92400e",padding:"1px 5px",borderRadius:3}}>auto</span> = best-effort categorization, not in your spec.
+      </p>
+    </div>
+  </div>;
+}
+
+const TOP_TABS=[{k:"rollup",label:"Rollup"},{k:"subsites",label:"Subsites"},{k:"comparison",label:"Comparison"}];
+function GannettDashboard(){
+  const [topTab,setTopTab]=useState("rollup");
+  return <div>
+    <div className="stamp">Data current as of {DATA_AS_OF} · GA4 property 406717704 · event affiliate_click · product = customEvent:product</div>
+    <div style={{display:"flex",borderBottom:"2px solid #e5e7eb",marginBottom:"1.5rem"}}>
+      {TOP_TABS.map(t=>{const active=topTab===t.k;return <button key={t.k} onClick={()=>setTopTab(t.k)} style={{fontSize:15,fontWeight:active?700:400,padding:"12px 32px",border:"none",background:"transparent",cursor:"pointer",marginBottom:-2,borderBottom:active?"3px solid #111827":"3px solid transparent",color:active?"#111827":"#6b7280"}}>{t.label}</button>;})}
+    </div>
+    {topTab==="rollup"&&<RollupTab/>}
+    {topTab==="subsites"&&<SubsitesTab/>}
+    {topTab==="comparison"&&<ComparisonTab/>}
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<GannettDashboard/>);
+
+</script>
+</body>
+</html>
