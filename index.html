@@ -1362,7 +1362,7 @@ function OperatorView({opFilter,setOpFilter,dsi,dei,setDsi,setDei,presets}){
       const apr=prodSum(o.n, aprStart, mtdStart-1);
       const pmay = MAY_DAYS_ELAPSED>0 ? Math.round((mt/MAY_DAYS_ELAPSED)*MAY_DAYS) : 0;
       const t30 = prodSum(o.n, Math.max(0,DAILY_EC.length-30), DAILY_EC.length-1)/30;
-      const pjun = Math.round(t30 * 30);
+      const pjun = pmay; // match PROJ JUN (MTD pace)
       const pjul = Math.round(t30 * 31);
       const paug = Math.round(t30 * 31);
       acc[k].win+=w;
