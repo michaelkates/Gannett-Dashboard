@@ -12,12 +12,11 @@
 </head>
 <body>
 <div id="root"></div>
-<script src="https://accounts.google.com/gsi/client" async></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script type="text/babel" data-presets="react">
-const { useState, useMemo } = React;
+const { useState, useMemo, useEffect } = React;
 let DATA_AS_OF = "2026-06-19";
 const MO = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const ML = m => MO[parseInt(m.slice(4))-1] + "'" + m.slice(2,4);
@@ -370,124 +369,6 @@ const HOST_DAILY = {
   "rolltidewire.usatoday.com": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,3,0,1,2,1,0,0,0,1,0,4,0,0,0,1,0,1,7,0,1,0,0,0,1,3,0,1,15,24,45,16,1,1,3,8,6,0,0,2,0,1,4,4,0,0,1,0,0,7,7,5,0,5,0,1,8,33,10,2,1,0,0,4,2,4,7,2,0,0,17,25,13,3,1,1,11,11,8,1,3,3,0,0,13,6,24,3,1,0,0,0,2,2,4,4,0,2,1,1,0,0,0,0,0,4,1,0,0,0,0,0,0,0,0,0,1,0,5,2,1,0,1,10,9,4,0,2,1,3,12,23,11,4,5,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,2,0,0,3,0,3,0,1,3,3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
   "Hard Rock Games": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,71,0,148]
 };
-
-// ─── live GA4 refresh ────────────────────────────────────────────────
-// Calls Google Analytics Data API on demand via browser OAuth2 (no server needed).
-// First-time setup: click the 🔑 icon and paste your OAuth 2.0 Client ID.
-// Get one at: console.cloud.google.com → APIs & Services → Credentials → OAuth 2.0 Client IDs
-// Authorized JavaScript origin must include: https://<your-github-username>.github.io
-const GA_PROPERTY_ID = "406717704";
-let _gaStatus = "idle"; // idle | authing | loading | loaded | error
-let _gaErrorMsg = "";
-let _gaSetStatus = null; // injected by GannettDashboard component
-let _gaTokenClient = null;
-
-function _gaGetClientId(){try{return localStorage.getItem("ga4_client_id")||"";}catch(e){return "";}}
-function _gaSaveClientId(id){try{localStorage.setItem("ga4_client_id",id);}catch(e){}}
-
-async function _gaRunReport(token, body){
-  const r = await fetch(
-    `https://analyticsdata.googleapis.com/v1beta/properties/${GA_PROPERTY_ID}:runReport`,
-    {method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify(body)}
-  );
-  if(!r.ok){const t=await r.text();throw new Error(`GA4 API ${r.status}: ${t.slice(0,200)}`);}
-  return r.json();
-}
-
-async function _gaLoadLiveData(token){
-  const affFilter={filter:{fieldName:"eventName",stringFilter:{matchType:"EXACT",value:"affiliate_click"}}};
-  const yest=new Date();yest.setDate(yest.getDate()-1);
-  const pad=n=>String(n).padStart(2,"0");
-  const fmtDate=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-  const yesterday=fmtDate(yest);
-  const monthStart=`${yest.getFullYear()}-${pad(yest.getMonth()+1)}-01`;
-
-  const [mtdTotals,mtdByProd,mtdByHost,last7,prev7]=await Promise.all([
-    _gaRunReport(token,{dateRanges:[{startDate:monthStart,endDate:yesterday}],metrics:[{name:"eventCount"},{name:"sessions"},{name:"totalUsers"}],dimensionFilter:affFilter}),
-    _gaRunReport(token,{dateRanges:[{startDate:monthStart,endDate:yesterday}],dimensions:[{name:"customEvent:product"}],metrics:[{name:"eventCount"}],dimensionFilter:affFilter}),
-    _gaRunReport(token,{dateRanges:[{startDate:monthStart,endDate:yesterday}],dimensions:[{name:"hostName"}],metrics:[{name:"eventCount"}],dimensionFilter:affFilter}),
-    _gaRunReport(token,{dateRanges:[{startDate:"7daysAgo",endDate:"yesterday"}],metrics:[{name:"eventCount"},{name:"sessions"},{name:"totalUsers"}],dimensionFilter:affFilter}),
-    _gaRunReport(token,{dateRanges:[{startDate:"14daysAgo",endDate:"8daysAgo"}],metrics:[{name:"eventCount"},{name:"sessions"},{name:"totalUsers"}],dimensionFilter:affFilter})
-  ]);
-
-  // Product → category map from OPERATORS
-  const opCatMap={};
-  OPERATORS.forEach(o=>{opCatMap[o.n]=o.c;});
-
-  // MTD totals
-  const mv=mtdTotals.rows?.[0]?.metricValues||[{value:"0"},{value:"0"},{value:"0"}];
-  const newEc=parseInt(mv[0].value)||0, newSess=parseInt(mv[1].value)||0, newUsers=parseInt(mv[2].value)||0;
-
-  // byProduct (aggregate GA4 product names into dashboard categories)
-  const byProduct={};
-  for(const row of (mtdByProd.rows||[])){
-    const cat=opCatMap[row.dimensionValues[0].value]||"other";
-    byProduct[cat]=(byProduct[cat]||0)+(parseInt(row.metricValues[0].value)||0);
-  }
-
-  // byHost
-  const byHost={};
-  for(const row of (mtdByHost.rows||[])){byHost[row.dimensionValues[0].value]=parseInt(row.metricValues[0].value)||0;}
-
-  // LAST7
-  const l7v=last7.rows?.[0]?.metricValues||[{value:"0"},{value:"0"},{value:"0"}];
-  const p7v=prev7.rows?.[0]?.metricValues||[{value:"0"},{value:"0"},{value:"0"}];
-  const l7Start=new Date();l7Start.setDate(l7Start.getDate()-7);
-  const fmtShort=d=>`${MO[d.getMonth()]} ${d.getDate()}`;
-  const l7Label=`${fmtShort(l7Start)}–${fmtShort(yest)}`;
-  const daysInMonth=new Date(yest.getFullYear(),yest.getMonth()+1,0).getDate();
-
-  // Mutate globals — React re-render picks up new values
-  DATA_AS_OF=yesterday;
-  MTD={...MTD,month:MO[yest.getMonth()]+"'"+String(yest.getFullYear()).slice(2),daysElapsed:yest.getDate(),daysInMonth,ec:newEc,sessions:newSess,users:newUsers,byHost,byProduct};
-  LAST7={...LAST7,label:l7Label,ec:parseInt(l7v[0].value)||0,sessions:parseInt(l7v[1].value)||0,users:parseInt(l7v[2].value)||0,prevEc:parseInt(p7v[0].value)||0,prevSess:parseInt(p7v[1].value)||0};
-}
-
-function gaRefresh(){
-  const clientId=_gaGetClientId();
-  if(!clientId){_gaStatus="error";_gaErrorMsg="No Client ID set — click 🔑 to add your OAuth 2.0 Client ID.";_gaSetStatus?.(_gaStatus);return;}
-  if(!window.google?.accounts?.oauth2){_gaStatus="error";_gaErrorMsg="Google Identity Services script not loaded yet — try again in a moment.";_gaSetStatus?.(_gaStatus);return;}
-  if(!_gaTokenClient||_gaTokenClient._clientId!==clientId){
-    _gaTokenClient=window.google.accounts.oauth2.initTokenClient({
-      client_id:clientId,
-      scope:"https://www.googleapis.com/auth/analytics.readonly",
-      callback:async(resp)=>{
-        if(resp.error){_gaStatus="error";_gaErrorMsg=resp.error_description||resp.error;_gaSetStatus?.(_gaStatus);return;}
-        _gaStatus="loading";_gaSetStatus?.(_gaStatus);
-        try{await _gaLoadLiveData(resp.access_token);_gaStatus="loaded";}catch(e){_gaStatus="error";_gaErrorMsg=e.message;}
-        _gaSetStatus?.(_gaStatus);
-      }
-    });
-    _gaTokenClient._clientId=clientId;
-  }
-  _gaStatus="authing";_gaSetStatus?.(_gaStatus);
-  _gaTokenClient.requestAccessToken({prompt:""});
-}
-
-function LiveRefreshBar({status,onRefresh}){
-  const [showKey,setShowKey]=useState(false);
-  const [idVal,setIdVal]=useState(_gaGetClientId());
-  const saveKey=()=>{_gaSaveClientId(idVal.trim());_gaTokenClient=null;setShowKey(false);};
-  const busy=status==="loading"||status==="authing";
-  const statusEl=status==="idle"?<span style={{fontSize:11,color:"#9ca3af"}}>Not yet refreshed</span>
-    :status==="authing"?<span style={{fontSize:11,color:"#6b7280"}}>Authenticating…</span>
-    :status==="loading"?<span style={{fontSize:11,color:"#6b7280"}}>Fetching GA4 data…</span>
-    :status==="loaded"?<span style={{fontSize:11,color:"#059669",fontWeight:500}}>✓ Live · {DATA_AS_OF}</span>
-    :<span style={{fontSize:11,color:"#dc2626"}}>⚠ {_gaErrorMsg}</span>;
-  return <div style={{marginBottom:"0.75rem"}}>
-    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-      <button onClick={onRefresh} disabled={busy} style={{fontSize:11,padding:"4px 12px",borderRadius:6,border:"1px solid #d1d5db",background:busy?"#f3f4f6":"white",cursor:busy?"not-allowed":"pointer",color:"#374151",display:"flex",alignItems:"center",gap:4}}>
-        <span style={{display:"inline-block",animation:busy?"spin 1s linear infinite":"none"}}>🔄</span> Refresh live data
-      </button>
-      {statusEl}
-      <button onClick={()=>setShowKey(v=>!v)} title="Set OAuth 2.0 Client ID" style={{marginLeft:"auto",fontSize:11,padding:"3px 8px",borderRadius:6,border:"1px solid #e5e7eb",background:showKey?"#f3f4f6":"white",cursor:"pointer",color:"#6b7280"}}>🔑 Client ID</button>
-    </div>
-    {showKey&&<div style={{display:"flex",gap:6,marginTop:6,alignItems:"center"}}>
-      <input value={idVal} onChange={e=>setIdVal(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveKey()} placeholder="Paste your OAuth 2.0 Client ID (…apps.googleusercontent.com)" style={{flex:1,fontSize:11,padding:"5px 8px",border:"1px solid #d1d5db",borderRadius:6,outline:"none"}}/>
-      <button onClick={saveKey} style={{fontSize:11,padding:"5px 12px",borderRadius:6,border:"none",background:"#111827",color:"white",cursor:"pointer",whiteSpace:"nowrap"}}>Save</button>
-    </div>}
-  </div>;
-}
 
 // ─── shared components ──────────────────────────────────────────────
 function PctBadge({pct,label}){
@@ -1280,10 +1161,10 @@ function ComparisonTab(){
 }
 
 // Days remaining in the current month (Jun 2026 = 30 days)
-const MAY_DAYS = 30;
-const MAY_DAYS_ELAPSED = 19;
+let MAY_DAYS = 30;
+let MAY_DAYS_ELAPSED = 19;
 // Find indices in DAILY_DATES for the start of months we care about
-const FIRST_OF_MONTH_IDX = (()=>{
+let FIRST_OF_MONTH_IDX = (()=>{
   const r={};
   DAILY_DATES.forEach((d,i)=>{const ym=d.slice(0,6);if(!(ym in r)) r[ym]=i;});
   return r;
@@ -1644,24 +1525,115 @@ function OperatorView({opFilter,setOpFilter,dsi,dei,setDsi,setDei,presets}){
 }
 
 
+// ─── Apps Script live-data layer ─────────────────────────────────────────────
+// Browser fetches fresh GA4 data from your Apps Script Web App on every page load.
+// Historical monthly arrays (MONTHS, TOTAL_EC, HOSTS.data, PRODUCTS.data) are
+// hardcoded above; everything else (daily series, MTD, LAST7, top pages) comes live.
+// Setup: deploy apps-script-ga4-api.js as a Web App and paste the URL below.
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz3ESKrUJPALGrJQkMlGtKQvXgD6B2lCXy8ZdNa__O1f69y4H0vAxqA71_zqee5w90xbQ/exec';
+
+function applyLiveData(live) {
+  // Replace daily series and current-period metrics with live values
+  DAILY_EC        = live.DAILY_EC;
+  DAILY_SESS      = live.DAILY_SESS;
+  PROD_DAILY      = live.PROD_DAILY;
+  HOST_DAILY      = live.HOST_DAILY;
+  MTD             = live.MTD;
+  LAST7           = live.LAST7;
+  TOP_PAGES_LAST7 = live.TOP_PAGES_LAST7;
+  TOP_PAGES_MTD   = live.TOP_PAGES_MTD;
+  DATA_AS_OF      = live.dataAsOf;
+  MAY_DAYS_ELAPSED = live.MTD.daysElapsed;
+  MAY_DAYS         = live.MTD.daysInMonth;
+
+  // Recompute derived date structures from the fresh arrays
+  DAILY_DATES        = _computeDailyDates();
+  FIRST_OF_MONTH_IDX = (()=>{ const r={}; DAILY_DATES.forEach((d,i)=>{const ym=d.slice(0,6);if(!(ym in r)) r[ym]=i;}); return r; })();
+
+  const de = live.MTD.daysElapsed || 1;
+  const di = live.MTD.daysInMonth || 30;
+
+  // Update current-month projected entry (last slot) in each monthly total array
+  TOTAL_EC[TOTAL_EC.length-1]     = Math.round(live.MTD.ec / de * di);
+  TOTAL_SESS[TOTAL_SESS.length-1] = Math.round((live.MTD.sessionsUnfiltered || live.MTD.sessions) / de * di);
+  TOTAL_USERS[TOTAL_USERS.length-1] = Math.round((live.MTD.usersUnfiltered || live.MTD.users) / de * di);
+
+  // Per-host current-month projection from HOST_DAILY MTD slice
+  HOST_KEYS.forEach(key => {
+    const h = HOSTS[key];
+    const series = live.HOST_DAILY[h.host];
+    if (series && series.length >= de) {
+      h.data[h.data.length-1] = Math.round(series.slice(-de).reduce((a,b)=>a+b,0) / de * di);
+    } else {
+      h.data[h.data.length-1] = 0;
+    }
+  });
+
+  // Per-category current-month projection from PROD_DAILY MTD slice
+  // Uses OPERATORS to map GA4 product names → dashboard categories
+  const catMtd = {};
+  PRODUCT_KEYS.forEach(k => catMtd[k] = 0);
+  const pcm = {};
+  OPERATORS.forEach(op => { pcm[op.n] = op.c; });
+  Object.entries(live.PROD_DAILY).forEach(([name, arr]) => {
+    const cat = pcm[name] || 'other';
+    if (catMtd[cat] === undefined) catMtd[cat] = 0;
+    if (arr.length >= de) catMtd[cat] += arr.slice(-de).reduce((a,b)=>a+b,0);
+  });
+  PRODUCT_KEYS.forEach(cat => {
+    PRODUCTS[cat].data[PRODUCTS[cat].data.length-1] = Math.round((catMtd[cat]||0) / de * di);
+  });
+}
+
 const TOP_TABS=[{k:"rollup",label:"Rollup"},{k:"subsites",label:"Subsites"},{k:"comparison",label:"Comparison"}];
 function GannettDashboard(){
   const [topTab,setTopTab]=useState("rollup");
-  const [gaStatus,setGaStatus]=useState("idle");
-  _gaSetStatus=s=>setGaStatus(s);
   return <div>
     <div className="stamp">Data current as of {DATA_AS_OF} · GA4 property 406717704 · event affiliate_click · product = customEvent:product</div>
-    <LiveRefreshBar status={gaStatus} onRefresh={gaRefresh}/>
     <div style={{display:"flex",borderBottom:"2px solid #e5e7eb",marginBottom:"1.5rem"}}>
       {TOP_TABS.map(t=>{const active=topTab===t.k;return <button key={t.k} onClick={()=>setTopTab(t.k)} style={{fontSize:15,fontWeight:active?700:400,padding:"12px 32px",border:"none",background:"transparent",cursor:"pointer",marginBottom:-2,borderBottom:active?"3px solid #111827":"3px solid transparent",color:active?"#111827":"#6b7280"}}>{t.label}</button>;})}
     </div>
-    {topTab==="rollup"&&<RollupTab key={gaStatus==="loaded"?"live":"static"}/>}
-    {topTab==="subsites"&&<SubsitesTab key={gaStatus==="loaded"?"live":"static"}/>}
-    {topTab==="comparison"&&<ComparisonTab key={gaStatus==="loaded"?"live":"static"}/>}
+    {topTab==="rollup"&&<RollupTab/>}
+    {topTab==="subsites"&&<SubsitesTab/>}
+    {topTab==="comparison"&&<ComparisonTab/>}
   </div>;
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<GannettDashboard/>);
+// DashboardApp: shows cached data immediately, then re-renders with live GA4 data
+// once the Apps Script responds. Full remount (key prop) ensures all components
+// re-read updated globals.
+function DashboardApp() {
+  const [renderKey, setRenderKey] = useState(0);
+  const [status,    setStatus]    = useState('loading'); // 'loading' | 'live' | 'stale'
+  const [fetchMsg,  setFetchMsg]  = useState('');
+
+  useEffect(() => {
+    fetch(APPS_SCRIPT_URL + '?endpoint=all')
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(live => {
+        if (live.error) throw new Error(live.error);
+        applyLiveData(live);
+        setStatus('live');
+        setRenderKey(k => k + 1);
+      })
+      .catch(e => {
+        console.warn('[Dashboard] Live fetch failed:', e.message);
+        setFetchMsg(e.message);
+        setStatus('stale');
+        setRenderKey(k => k + 1);
+      });
+  }, []);
+
+  const bs = {padding:'6px 14px',marginBottom:'0.5rem',borderRadius:6,fontSize:12,display:'flex',alignItems:'center',gap:8};
+  return <div>
+    {status==='loading' && <div style={{...bs,background:'#eff6ff',color:'#1d4ed8',border:'1px solid #bfdbfe'}}>⏳ Fetching live data from GA4…</div>}
+    {status==='stale'   && <div style={{...bs,background:'#fffbeb',color:'#92400e',border:'1px solid #fbbf24'}}>⚠️ Showing cached data — live fetch failed: {fetchMsg}</div>}
+    {status==='live'    && <div style={{...bs,background:'#f0fdf4',color:'#15803d',border:'1px solid #bbf7d0'}}>✓ Live GA4 data · as of {DATA_AS_OF} · refreshes on each page load</div>}
+    <GannettDashboard key={renderKey}/>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<DashboardApp/>);
 </script>
 </body>
 </
