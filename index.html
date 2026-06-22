@@ -12,12 +12,13 @@
 </head>
 <body>
 <div id="root"></div>
+<script src="https://accounts.google.com/gsi/client" async></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script type="text/babel" data-presets="react">
 const { useState, useMemo } = React;
-const DATA_AS_OF = "2026-06-19";
+let DATA_AS_OF = "2026-06-19";
 const MO = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const ML = m => MO[parseInt(m.slice(4))-1] + "'" + m.slice(2,4);
 const fN = n => Number(n).toLocaleString();
@@ -43,8 +44,8 @@ const DAILY_SESS = [140,413,3468,203,101,96,76,76,88,98,102,101,112,122,85,88,39
 const DAILY_DATES = (()=>{const o=[];let y=parseInt(DAILY_START.slice(0,4)),m=parseInt(DAILY_START.slice(4,6)),d=parseInt(DAILY_START.slice(6,8));for(let i=0;i<DAILY_EC.length;i++){o.push(`${y}${String(m).padStart(2,'0')}${String(d).padStart(2,'0')}`);const dim=new Date(y,m,0).getDate();d++;if(d>dim){d=1;m++;if(m>12){m=1;y++;}}}return o;})();
 const DL = ymd => MO[parseInt(ymd.slice(4,6))-1]+" "+parseInt(ymd.slice(6,8));
 
-const MTD = {month:"Jun'26",daysElapsed:19,daysInMonth:30,ec:24601,sessions:15425,users:12569,byHost:{"ftw.usatoday.com": 14162, "www.freep.com": 6458, "thelistwire.usatoday.com": 906, "www.usatoday.com": 638, "www.news-press.com": 567, "www.indystar.com": 224, "sportsbookwire.usatoday.com": 155, "www.courier-journal.com": 162, "chiefswire.usatoday.com": 145, "giantswire.usatoday.com": 93, "www.tennessean.com": 84, "www.azcentral.com": 78, "www.cincinnati.com": 65, "www.desmoinesregister.com": 42, "theeagleswire.usatoday.com": 10},byProduct:{"prediction": 294, "fantasy": 99, "sports": 441, "rmc": 973, "sweeps": 21952, "other": 38}};
-const LAST7 = {label:"Jun 13–Jun 19",ec:9697,sessions:5941,users:5151,prevEc:9900,prevSess:6182,byHost:{"ftw.usatoday.com": 6042, "www.freep.com": 2900, "thelistwire.usatoday.com": 176, "www.usatoday.com": 318, "www.news-press.com": 179, "www.indystar.com": 97, "sportsbookwire.usatoday.com": 45, "www.courier-journal.com": 46, "chiefswire.usatoday.com": 72, "giantswire.usatoday.com": 44, "www.tennessean.com": 27, "www.azcentral.com": 26, "www.cincinnati.com": 25, "www.desmoinesregister.com": 19, "theeagleswire.usatoday.com": 3},byProduct:{"prediction": 162, "fantasy": 34, "sports": 136, "rmc": 437, "sweeps": 8568, "other": 507}};
+let MTD = {month:"Jun'26",daysElapsed:19,daysInMonth:30,ec:24601,sessions:15425,users:12569,byHost:{"ftw.usatoday.com": 14162, "www.freep.com": 6458, "thelistwire.usatoday.com": 906, "www.usatoday.com": 638, "www.news-press.com": 567, "www.indystar.com": 224, "sportsbookwire.usatoday.com": 155, "www.courier-journal.com": 162, "chiefswire.usatoday.com": 145, "giantswire.usatoday.com": 93, "www.tennessean.com": 84, "www.azcentral.com": 78, "www.cincinnati.com": 65, "www.desmoinesregister.com": 42, "theeagleswire.usatoday.com": 10},byProduct:{"prediction": 294, "fantasy": 99, "sports": 441, "rmc": 973, "sweeps": 21952, "other": 38}};
+let LAST7 = {label:"Jun 13–Jun 19",ec:9697,sessions:5941,users:5151,prevEc:9900,prevSess:6182,byHost:{"ftw.usatoday.com": 6042, "www.freep.com": 2900, "thelistwire.usatoday.com": 176, "www.usatoday.com": 318, "www.news-press.com": 179, "www.indystar.com": 97, "sportsbookwire.usatoday.com": 45, "www.courier-journal.com": 46, "chiefswire.usatoday.com": 72, "giantswire.usatoday.com": 44, "www.tennessean.com": 27, "www.azcentral.com": 26, "www.cincinnati.com": 25, "www.desmoinesregister.com": 19, "theeagleswire.usatoday.com": 3},byProduct:{"prediction": 162, "fantasy": 34, "sports": 136, "rmc": 437, "sweeps": 8568, "other": 507}};
 
 // Top pages by affiliate_click — pulled from GA4 (refreshed daily — current as of DATA_AS_OF)
 const TOP_PAGES_LAST7 = [{path:"/story/sports/online-casino-rankings/86800526007/",host:"www.freep.com",clicks:1370},{path:"/story/casinos/2026/06/17/best-real-money-slots-to-play-online-june-2026-guide/88148280007/",host:"ftw.usatoday.com",clicks:1274},{path:"/story/sports/online-casinos-ranked/86800526007/",host:"www.freep.com",clicks:780},{path:"/story/casinos/highest-payout-casinos-june-2026-expert-guide/87394597007/",host:"ftw.usatoday.com",clicks:378},{path:"/story/casinos/2026/06/12/best-real-money-slots-to-play-online-june-2026/88148280007/",host:"ftw.usatoday.com",clicks:323},{path:"/story/casinos/2026/06/11/how-to-play-slots-online-guide-june-2026/89994195007/",host:"ftw.usatoday.com",clicks:251},{path:"/story/casinos/2026/06/16/best-real-money-slots-to-play-online-june-2026-guide/88148280007/",host:"ftw.usatoday.com",clicks:247},{path:"/story/casinos/2026/06/17/guide-slot-machine-symbols-icons/90375894007/",host:"ftw.usatoday.com",clicks:206},{path:"/story/sports/real-money-casino-apps/86952902007/",host:"www.freep.com",clicks:238},{path:"/story/casinos/online-casinos/89245781007/",host:"ftw.usatoday.com",clicks:201},{path:"/story/sports/florida-online-casinos-expert-guide/88107061007/",host:"www.news-press.com",clicks:199},{path:"/story/casinos/2026/06/15/guide-slot-machine-symbols-icons/90375894007/",host:"ftw.usatoday.com",clicks:193},{path:"/story/casinos/highest-payout-casinos-june-2026-guide/87394597007/",host:"ftw.usatoday.com",clicks:189},{path:"/story/casinos/2026/06/15/best-usa-paypal-casinos-june-2026-rankings/88306598007/",host:"ftw.usatoday.com",clicks:187},{path:"/story/casinos/2026/06/14/best-paypal-casinos-june-2026-rankings/88306598007/",host:"ftw.usatoday.com",clicks:183},{path:"/story/casinos/2026/06/11/best-classic-slots/90375574007/",host:"ftw.usatoday.com",clicks:162},{path:"/story/casinos/2026/06/14/best-real-money-slots-to-play-online-june-2026/88148280007/",host:"ftw.usatoday.com",clicks:153},{path:"/story/casinos/2026/06/15/how-to-play-slots-online-june-2026-beginners-guide/89994195007/",host:"ftw.usatoday.com",clicks:141},{path:"/story/sports/michigan-online-casinos-rankings/87508241007/",host:"www.freep.com",clicks:134},{path:"/story/casinos/2026/06/10/best-paypal-casinos-june-2026-rankings/88306598007/",host:"ftw.usatoday.com",clicks:121}];
@@ -369,6 +370,124 @@ const HOST_DAILY = {
   "rolltidewire.usatoday.com": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,3,0,1,2,1,0,0,0,1,0,4,0,0,0,1,0,1,7,0,1,0,0,0,1,3,0,1,15,24,45,16,1,1,3,8,6,0,0,2,0,1,4,4,0,0,1,0,0,7,7,5,0,5,0,1,8,33,10,2,1,0,0,4,2,4,7,2,0,0,17,25,13,3,1,1,11,11,8,1,3,3,0,0,13,6,24,3,1,0,0,0,2,2,4,4,0,2,1,1,0,0,0,0,0,4,1,0,0,0,0,0,0,0,0,0,1,0,5,2,1,0,1,10,9,4,0,2,1,3,12,23,11,4,5,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,2,0,0,3,0,3,0,1,3,3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
   "Hard Rock Games": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,71,0,148]
 };
+
+// ─── live GA4 refresh ────────────────────────────────────────────────
+// Calls Google Analytics Data API on demand via browser OAuth2 (no server needed).
+// First-time setup: click the 🔑 icon and paste your OAuth 2.0 Client ID.
+// Get one at: console.cloud.google.com → APIs & Services → Credentials → OAuth 2.0 Client IDs
+// Authorized JavaScript origin must include: https://<your-github-username>.github.io
+const GA_PROPERTY_ID = "406717704";
+let _gaStatus = "idle"; // idle | authing | loading | loaded | error
+let _gaErrorMsg = "";
+let _gaSetStatus = null; // injected by GannettDashboard component
+let _gaTokenClient = null;
+
+function _gaGetClientId(){try{return localStorage.getItem("ga4_client_id")||"";}catch(e){return "";}}
+function _gaSaveClientId(id){try{localStorage.setItem("ga4_client_id",id);}catch(e){}}
+
+async function _gaRunReport(token, body){
+  const r = await fetch(
+    `https://analyticsdata.googleapis.com/v1beta/properties/${GA_PROPERTY_ID}:runReport`,
+    {method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify(body)}
+  );
+  if(!r.ok){const t=await r.text();throw new Error(`GA4 API ${r.status}: ${t.slice(0,200)}`);}
+  return r.json();
+}
+
+async function _gaLoadLiveData(token){
+  const affFilter={filter:{fieldName:"eventName",stringFilter:{matchType:"EXACT",value:"affiliate_click"}}};
+  const yest=new Date();yest.setDate(yest.getDate()-1);
+  const pad=n=>String(n).padStart(2,"0");
+  const fmtDate=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const yesterday=fmtDate(yest);
+  const monthStart=`${yest.getFullYear()}-${pad(yest.getMonth()+1)}-01`;
+
+  const [mtdTotals,mtdByProd,mtdByHost,last7,prev7]=await Promise.all([
+    _gaRunReport(token,{dateRanges:[{startDate:monthStart,endDate:yesterday}],metrics:[{name:"eventCount"},{name:"sessions"},{name:"totalUsers"}],dimensionFilter:affFilter}),
+    _gaRunReport(token,{dateRanges:[{startDate:monthStart,endDate:yesterday}],dimensions:[{name:"customEvent:product"}],metrics:[{name:"eventCount"}],dimensionFilter:affFilter}),
+    _gaRunReport(token,{dateRanges:[{startDate:monthStart,endDate:yesterday}],dimensions:[{name:"hostName"}],metrics:[{name:"eventCount"}],dimensionFilter:affFilter}),
+    _gaRunReport(token,{dateRanges:[{startDate:"7daysAgo",endDate:"yesterday"}],metrics:[{name:"eventCount"},{name:"sessions"},{name:"totalUsers"}],dimensionFilter:affFilter}),
+    _gaRunReport(token,{dateRanges:[{startDate:"14daysAgo",endDate:"8daysAgo"}],metrics:[{name:"eventCount"},{name:"sessions"},{name:"totalUsers"}],dimensionFilter:affFilter})
+  ]);
+
+  // Product → category map from OPERATORS
+  const opCatMap={};
+  OPERATORS.forEach(o=>{opCatMap[o.n]=o.c;});
+
+  // MTD totals
+  const mv=mtdTotals.rows?.[0]?.metricValues||[{value:"0"},{value:"0"},{value:"0"}];
+  const newEc=parseInt(mv[0].value)||0, newSess=parseInt(mv[1].value)||0, newUsers=parseInt(mv[2].value)||0;
+
+  // byProduct (aggregate GA4 product names into dashboard categories)
+  const byProduct={};
+  for(const row of (mtdByProd.rows||[])){
+    const cat=opCatMap[row.dimensionValues[0].value]||"other";
+    byProduct[cat]=(byProduct[cat]||0)+(parseInt(row.metricValues[0].value)||0);
+  }
+
+  // byHost
+  const byHost={};
+  for(const row of (mtdByHost.rows||[])){byHost[row.dimensionValues[0].value]=parseInt(row.metricValues[0].value)||0;}
+
+  // LAST7
+  const l7v=last7.rows?.[0]?.metricValues||[{value:"0"},{value:"0"},{value:"0"}];
+  const p7v=prev7.rows?.[0]?.metricValues||[{value:"0"},{value:"0"},{value:"0"}];
+  const l7Start=new Date();l7Start.setDate(l7Start.getDate()-7);
+  const fmtShort=d=>`${MO[d.getMonth()]} ${d.getDate()}`;
+  const l7Label=`${fmtShort(l7Start)}–${fmtShort(yest)}`;
+  const daysInMonth=new Date(yest.getFullYear(),yest.getMonth()+1,0).getDate();
+
+  // Mutate globals — React re-render picks up new values
+  DATA_AS_OF=yesterday;
+  MTD={...MTD,month:MO[yest.getMonth()]+"'"+String(yest.getFullYear()).slice(2),daysElapsed:yest.getDate(),daysInMonth,ec:newEc,sessions:newSess,users:newUsers,byHost,byProduct};
+  LAST7={...LAST7,label:l7Label,ec:parseInt(l7v[0].value)||0,sessions:parseInt(l7v[1].value)||0,users:parseInt(l7v[2].value)||0,prevEc:parseInt(p7v[0].value)||0,prevSess:parseInt(p7v[1].value)||0};
+}
+
+function gaRefresh(){
+  const clientId=_gaGetClientId();
+  if(!clientId){_gaStatus="error";_gaErrorMsg="No Client ID set — click 🔑 to add your OAuth 2.0 Client ID.";_gaSetStatus?.(_gaStatus);return;}
+  if(!window.google?.accounts?.oauth2){_gaStatus="error";_gaErrorMsg="Google Identity Services script not loaded yet — try again in a moment.";_gaSetStatus?.(_gaStatus);return;}
+  if(!_gaTokenClient||_gaTokenClient._clientId!==clientId){
+    _gaTokenClient=window.google.accounts.oauth2.initTokenClient({
+      client_id:clientId,
+      scope:"https://www.googleapis.com/auth/analytics.readonly",
+      callback:async(resp)=>{
+        if(resp.error){_gaStatus="error";_gaErrorMsg=resp.error_description||resp.error;_gaSetStatus?.(_gaStatus);return;}
+        _gaStatus="loading";_gaSetStatus?.(_gaStatus);
+        try{await _gaLoadLiveData(resp.access_token);_gaStatus="loaded";}catch(e){_gaStatus="error";_gaErrorMsg=e.message;}
+        _gaSetStatus?.(_gaStatus);
+      }
+    });
+    _gaTokenClient._clientId=clientId;
+  }
+  _gaStatus="authing";_gaSetStatus?.(_gaStatus);
+  _gaTokenClient.requestAccessToken({prompt:""});
+}
+
+function LiveRefreshBar({status,onRefresh}){
+  const [showKey,setShowKey]=useState(false);
+  const [idVal,setIdVal]=useState(_gaGetClientId());
+  const saveKey=()=>{_gaSaveClientId(idVal.trim());_gaTokenClient=null;setShowKey(false);};
+  const busy=status==="loading"||status==="authing";
+  const statusEl=status==="idle"?<span style={{fontSize:11,color:"#9ca3af"}}>Not yet refreshed</span>
+    :status==="authing"?<span style={{fontSize:11,color:"#6b7280"}}>Authenticating…</span>
+    :status==="loading"?<span style={{fontSize:11,color:"#6b7280"}}>Fetching GA4 data…</span>
+    :status==="loaded"?<span style={{fontSize:11,color:"#059669",fontWeight:500}}>✓ Live · {DATA_AS_OF}</span>
+    :<span style={{fontSize:11,color:"#dc2626"}}>⚠ {_gaErrorMsg}</span>;
+  return <div style={{marginBottom:"0.75rem"}}>
+    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+      <button onClick={onRefresh} disabled={busy} style={{fontSize:11,padding:"4px 12px",borderRadius:6,border:"1px solid #d1d5db",background:busy?"#f3f4f6":"white",cursor:busy?"not-allowed":"pointer",color:"#374151",display:"flex",alignItems:"center",gap:4}}>
+        <span style={{display:"inline-block",animation:busy?"spin 1s linear infinite":"none"}}>🔄</span> Refresh live data
+      </button>
+      {statusEl}
+      <button onClick={()=>setShowKey(v=>!v)} title="Set OAuth 2.0 Client ID" style={{marginLeft:"auto",fontSize:11,padding:"3px 8px",borderRadius:6,border:"1px solid #e5e7eb",background:showKey?"#f3f4f6":"white",cursor:"pointer",color:"#6b7280"}}>🔑 Client ID</button>
+    </div>
+    {showKey&&<div style={{display:"flex",gap:6,marginTop:6,alignItems:"center"}}>
+      <input value={idVal} onChange={e=>setIdVal(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveKey()} placeholder="Paste your OAuth 2.0 Client ID (…apps.googleusercontent.com)" style={{flex:1,fontSize:11,padding:"5px 8px",border:"1px solid #d1d5db",borderRadius:6,outline:"none"}}/>
+      <button onClick={saveKey} style={{fontSize:11,padding:"5px 12px",borderRadius:6,border:"none",background:"#111827",color:"white",cursor:"pointer",whiteSpace:"nowrap"}}>Save</button>
+    </div>}
+  </div>;
+}
 
 // ─── shared components ──────────────────────────────────────────────
 function PctBadge({pct,label}){
@@ -1463,7 +1582,7 @@ function OperatorView({opFilter,setOpFilter,dsi,dei,setDsi,setDei,presets}){
               <th rowSpan={2} style={{padding:"6px 8px",textAlign:"left",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>Product</th>
               <th rowSpan={2} style={{padding:"6px 8px",textAlign:"left",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>Category</th>
               <th colSpan={2} style={{padding:"4px 8px 2px",textAlign:"center",fontWeight:500,color:"#6b7280",fontSize:10,textTransform:"uppercase",letterSpacing:"0.05em",borderBottom:"1px dashed #e5e7eb"}}>Window</th>
-              <th rowSpan={2} style={{padding:"6px 8px",textAlign:"right",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>MTD</th>
+                    <th rowSpan={2} style={{padding:"6px 8px",textAlign:"right",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>MTD</th>
               <th rowSpan={2} style={{padding:"6px 8px",textAlign:"right",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>May</th>
               <th rowSpan={2} style={{padding:"6px 8px",textAlign:"right",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>Proj Jun</th>
               <th colSpan={3} style={{padding:"4px 8px 2px",textAlign:"center",fontWeight:500,color:"#D85A30",fontSize:10,textTransform:"uppercase",letterSpacing:"0.05em",borderBottom:"1px dashed #e5e7eb"}}>3-month forecast (Jun–Aug)</th>
@@ -1524,17 +1643,21 @@ function OperatorView({opFilter,setOpFilter,dsi,dei,setDsi,setDei,presets}){
   </div>;
 }
 
+
 const TOP_TABS=[{k:"rollup",label:"Rollup"},{k:"subsites",label:"Subsites"},{k:"comparison",label:"Comparison"}];
 function GannettDashboard(){
   const [topTab,setTopTab]=useState("rollup");
+  const [gaStatus,setGaStatus]=useState("idle");
+  _gaSetStatus=s=>setGaStatus(s);
   return <div>
     <div className="stamp">Data current as of {DATA_AS_OF} · GA4 property 406717704 · event affiliate_click · product = customEvent:product</div>
+    <LiveRefreshBar status={gaStatus} onRefresh={gaRefresh}/>
     <div style={{display:"flex",borderBottom:"2px solid #e5e7eb",marginBottom:"1.5rem"}}>
       {TOP_TABS.map(t=>{const active=topTab===t.k;return <button key={t.k} onClick={()=>setTopTab(t.k)} style={{fontSize:15,fontWeight:active?700:400,padding:"12px 32px",border:"none",background:"transparent",cursor:"pointer",marginBottom:-2,borderBottom:active?"3px solid #111827":"3px solid transparent",color:active?"#111827":"#6b7280"}}>{t.label}</button>;})}
     </div>
-    {topTab==="rollup"&&<RollupTab/>}
-    {topTab==="subsites"&&<SubsitesTab/>}
-    {topTab==="comparison"&&<ComparisonTab/>}
+    {topTab==="rollup"&&<RollupTab key={gaStatus==="loaded"?"live":"static"}/>}
+    {topTab==="subsites"&&<SubsitesTab key={gaStatus==="loaded"?"live":"static"}/>}
+    {topTab==="comparison"&&<ComparisonTab key={gaStatus==="loaded"?"live":"static"}/>}
   </div>;
 }
 
