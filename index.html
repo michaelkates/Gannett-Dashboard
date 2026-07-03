@@ -394,6 +394,9 @@ function GranToggle({value,onChange}){
 }
 function RecentActivity(){
   const aprEC=TOTAL_EC[LATEST_FULL_MONTH_IDX]||0,aprSess=TOTAL_SESS[LATEST_FULL_MONTH_IDX]||0;
+  const aprYM=MONTHS[LATEST_FULL_MONTH_IDX];
+  const aprMon=MO[parseInt(aprYM.slice(4))-1];
+  const aprDays=new Date(parseInt(aprYM.slice(0,4)),parseInt(aprYM.slice(4,6)),0).getDate();
   const wow=LAST7.prevEc>0?((LAST7.ec-LAST7.prevEc)/LAST7.prevEc*100):null;
   const mtdProj=Math.round((MTD.ec/MTD.daysElapsed)*MTD.daysInMonth);
   const mtdVsApr=aprEC>0?((mtdProj-aprEC)/aprEC*100):null;
@@ -415,7 +418,7 @@ function RecentActivity(){
         <div style={{background:"white",borderRadius:10,padding:"0.85rem 1rem",border:"1px solid #fde68a"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
             <div style={{fontSize:10,fontWeight:600,color:"#92400e",textTransform:"uppercase"}}>MTD</div>
-            <PctBadge pct={mtdVsApr} label="proj vs May"/>
+            <PctBadge pct={mtdVsApr} label={`proj vs ${aprMon}`}/>
           </div>
           <div style={{fontSize:26,fontWeight:800,color:"#D85A30",lineHeight:1}}>{fN(MTD.ec)}</div>
           <div style={{fontSize:11,color:"#6b7280",marginTop:4}}>proj {fN(mtdProj)} · {(MTD.ec/MTD.daysElapsed).toFixed(0)}/day</div>
@@ -425,11 +428,11 @@ function RecentActivity(){
         </div>
         <div style={{background:"white",borderRadius:10,padding:"0.85rem 1rem",border:"1px solid #fde68a"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-            <div style={{fontSize:10,fontWeight:600,color:"#92400e",textTransform:"uppercase"}}>May (last full)</div>
+            <div style={{fontSize:10,fontWeight:600,color:"#92400e",textTransform:"uppercase"}}>{aprMon} (last full)</div>
             <PctBadge pct={TOTAL_EC[LATEST_FULL_MONTH_IDX-1]>0?((aprEC-TOTAL_EC[LATEST_FULL_MONTH_IDX-1])/TOTAL_EC[LATEST_FULL_MONTH_IDX-1]*100):null} label="MoM"/>
           </div>
           <div style={{fontSize:26,fontWeight:800,color:"#6b7280",lineHeight:1}}>{fN(aprEC)}</div>
-          <div style={{fontSize:11,color:"#6b7280",marginTop:4}}>{(aprEC/30).toFixed(0)}/day · CR {fP(aprEC,aprSess)}</div>
+          <div style={{fontSize:11,color:"#6b7280",marginTop:4}}>{(aprEC/aprDays).toFixed(0)}/day · CR {fP(aprEC,aprSess)}</div>
         </div>
       </div>
     </div>
@@ -1337,15 +1340,24 @@ function DateRangePicker({dsi,dei,onChange,presets}){
 }
 
 function OperatorView({opFilter,setOpFilter,dsi,dei,setDsi,setDei,presets}){
-  // Window state lifted to parent; we still derive month-boundary indexes for MTD/Apr columns
-  const mtdStart = FIRST_OF_MONTH_IDX["202606"] || (DAILY_EC.length - MAY_DAYS_ELAPSED);
-  const aprStart = FIRST_OF_MONTH_IDX["202605"] || (DAILY_EC.length - MAY_DAYS_ELAPSED - 31);
+  // Current/prior/next month keys derived from the latest daily data point — never hardcoded,
+  // so this view automatically advances every month instead of freezing on a fixed month.
+  const curYM = DAILY_DATES[DAILY_DATES.length-1].slice(0,6);
+  const shiftYM = (ym, delta) => { let y=parseInt(ym.slice(0,4)), m=parseInt(ym.slice(4,6))+delta; while(m>12){m-=12;y++;} while(m<1){m+=12;y--;} return `${y}${String(m).padStart(2,'0')}`; };
+  const daysInYM = (ym) => new Date(parseInt(ym.slice(0,4)), parseInt(ym.slice(4,6)), 0).getDate();
+  const priorYM = shiftYM(curYM,-1), next1YM = shiftYM(curYM,1), next2YM = shiftYM(curYM,2);
+  const curMon = MO[parseInt(curYM.slice(4))-1], priorMon = MO[parseInt(priorYM.slice(4))-1];
+  const next1Mon = MO[parseInt(next1YM.slice(4))-1], next2Mon = MO[parseInt(next2YM.slice(4))-1];
+
+  // Window state lifted to parent; we still derive month-boundary indexes for MTD/prior-month columns
+  const mtdStart = FIRST_OF_MONTH_IDX[curYM] ?? (DAILY_EC.length - MAY_DAYS_ELAPSED);
+  const aprStart = FIRST_OF_MONTH_IDX[priorYM] ?? (DAILY_EC.length - MAY_DAYS_ELAPSED - 31);
   const [sortBy, setSortBy] = useState("proj");  // "proj" or "window"
   const winDays = dei - dsi + 1;
 
   // Filter by category (driven by the chips at top of view)
   const filtered = opFilter==="all" ? OPERATORS : OPERATORS.filter(o => o.c===opFilter);
-  const JUN_DAYS = 30, JUL_DAYS = 31, AUG_DAYS = 31;
+  const JUL_DAYS = daysInYM(next1YM), AUG_DAYS = daysInYM(next2YM);
   const rows = filtered.map(o=>{
     const winTotal = prodSum(o.n, dsi, dei);
     const winAvg = winDays>0 ? winTotal/winDays : 0;
@@ -1411,8 +1423,8 @@ function OperatorView({opFilter,setOpFilter,dsi,dei,setDsi,setDei,presets}){
         <span style={{fontSize:10,fontWeight:500,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.05em"}}>All products</span>
         <span style={{fontSize:18,fontWeight:700}}>{fN(grandWin)}</span>
         <span style={{fontSize:10,color:"#9ca3af"}}>{windowLabel} · <strong style={{color:"#111"}}>{(grandWin/Math.max(1,winDays)).toFixed(0)}</strong>/day</span>
-        <div style={{fontSize:10,color:"#6b7280",borderTop:"1px solid #f3f4f6",paddingTop:4,marginTop:2}}>MTD <strong style={{color:"#111"}}>{fN(grandMtd)}</strong> · proj Jun <strong style={{color:"#111"}}>{fN(grandProjMay)}</strong></div>
-        <div style={{fontSize:10,color:"#6b7280",marginTop:2}}>Jun <strong style={{color:"#111"}}>{fN(grandProjJun)}</strong> · Jul <strong style={{color:"#111"}}>{fN(grandProjJul)}</strong> · Aug <strong style={{color:"#111"}}>{fN(grandProjAug)}</strong></div>
+        <div style={{fontSize:10,color:"#6b7280",borderTop:"1px solid #f3f4f6",paddingTop:4,marginTop:2}}>MTD <strong style={{color:"#111"}}>{fN(grandMtd)}</strong> · proj {curMon} <strong style={{color:"#111"}}>{fN(grandProjMay)}</strong></div>
+        <div style={{fontSize:10,color:"#6b7280",marginTop:2}}>{curMon} <strong style={{color:"#111"}}>{fN(grandProjJun)}</strong> · {next1Mon} <strong style={{color:"#111"}}>{fN(grandProjJul)}</strong> · {next2Mon} <strong style={{color:"#111"}}>{fN(grandProjAug)}</strong></div>
       </button>
       {PRODUCT_KEYS.map(k=>{const a=opFilter===k,info=PRODUCTS[k],t=totalsByCat[k];
         const mayVsApr = t.aprTotal>0 ? ((t.projMay-t.aprTotal)/t.aprTotal*100) : null;
@@ -1420,29 +1432,29 @@ function OperatorView({opFilter,setOpFilter,dsi,dei,setDsi,setDei,presets}){
         <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:6,height:6,borderRadius:"50%",background:info.color}}/><span style={{fontSize:10,fontWeight:500,color:a?info.color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.05em"}}>{info.label}</span></div>
         <span style={{fontSize:18,fontWeight:700,color:a?info.color:"#111"}}>{fN(t.win)}</span>
         <span style={{fontSize:10,color:"#9ca3af"}}>{windowLabel} · <strong style={{color:info.color}}>{(t.win/Math.max(1,winDays)).toFixed(0)}</strong>/day</span>
-        <div style={{fontSize:10,color:"#6b7280",borderTop:"1px solid #f3f4f6",paddingTop:4,marginTop:2}}>MTD <strong>{fN(t.mtd)}</strong> · proj Jun <strong style={{color:info.color}}>{fN(t.projMay)}</strong> {mayVsApr!==null&&<PctBadge pct={mayVsApr}/>}</div>
-        <div style={{fontSize:10,color:"#6b7280",marginTop:2}}>Jun <strong style={{color:info.color}}>{fN(t.projJun)}</strong> · Jul <strong style={{color:info.color}}>{fN(t.projJul)}</strong> · Aug <strong style={{color:info.color}}>{fN(t.projAug)}</strong></div>
+        <div style={{fontSize:10,color:"#6b7280",borderTop:"1px solid #f3f4f6",paddingTop:4,marginTop:2}}>MTD <strong>{fN(t.mtd)}</strong> · proj {curMon} <strong style={{color:info.color}}>{fN(t.projMay)}</strong> {mayVsApr!==null&&<PctBadge pct={mayVsApr}/>}</div>
+        <div style={{fontSize:10,color:"#6b7280",marginTop:2}}>{curMon} <strong style={{color:info.color}}>{fN(t.projJun)}</strong> · {next1Mon} <strong style={{color:info.color}}>{fN(t.projJul)}</strong> · {next2Mon} <strong style={{color:info.color}}>{fN(t.projAug)}</strong></div>
       </button>;})}
     </div>
 
     {/* Dedicated current-month projection summary — visible all the time at the top of breakdown view */}
     <div style={{background:"linear-gradient(135deg,#fef3c7 0%,#fffbeb 100%)",border:"1.5px solid #fbbf24",borderRadius:12,padding:"1rem 1.25rem",marginBottom:"1rem"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:"0.65rem"}}>
-        <span style={{fontSize:11,fontWeight:700,color:"#92400e",textTransform:"uppercase",letterSpacing:"0.07em"}}>Current month projection — Jun 2026 (end of month)</span>
+        <span style={{fontSize:11,fontWeight:700,color:"#92400e",textTransform:"uppercase",letterSpacing:"0.07em"}}>Current month projection — {curMon} {curYM.slice(0,4)} (end of month)</span>
         <span style={{fontSize:10,color:"#a16207"}}>linear MTD-pace, {MAY_DAYS_ELAPSED}/{MAY_DAYS} days elapsed</span>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:8}}>
         <div style={{background:"white",borderRadius:8,padding:"0.6rem 0.85rem",border:"1px solid #fde68a"}}>
           <div style={{fontSize:10,color:"#92400e",textTransform:"uppercase",fontWeight:600,marginBottom:3}}>All categories</div>
           <div style={{fontSize:20,fontWeight:800,color:"#D85A30"}}>{fN(grandProjMay)}</div>
-          <div style={{fontSize:10,color:"#9ca3af",marginTop:2}}>MTD {fN(grandMtd)} · May {fN(grandApr)} {grandApr>0&&<PctBadge pct={((grandProjMay-grandApr)/grandApr*100)}/>}</div>
+          <div style={{fontSize:10,color:"#9ca3af",marginTop:2}}>MTD {fN(grandMtd)} · {priorMon} {fN(grandApr)} {grandApr>0&&<PctBadge pct={((grandProjMay-grandApr)/grandApr*100)}/>}</div>
         </div>
         {PRODUCT_KEYS.map(k=>{const t=totalsByCat[k],info=PRODUCTS[k];
           const vsApr = t.aprTotal>0 ? ((t.projMay-t.aprTotal)/t.aprTotal*100) : null;
           return <div key={k} style={{background:"white",borderRadius:8,padding:"0.6rem 0.85rem",border:"1px solid #fde68a"}}>
             <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}><div style={{width:6,height:6,borderRadius:"50%",background:info.color}}/><span style={{fontSize:10,color:"#92400e",textTransform:"uppercase",fontWeight:600}}>{info.label}</span></div>
             <div style={{fontSize:20,fontWeight:800,color:info.color}}>{fN(t.projMay)}</div>
-            <div style={{fontSize:10,color:"#9ca3af",marginTop:2}}>MTD {fN(t.mtd)} · May {fN(t.aprTotal)} {vsApr!==null&&<PctBadge pct={vsApr}/>}</div>
+            <div style={{fontSize:10,color:"#9ca3af",marginTop:2}}>MTD {fN(t.mtd)} · {priorMon} {fN(t.aprTotal)} {vsApr!==null&&<PctBadge pct={vsApr}/>}</div>
           </div>;
         })}
       </div>
@@ -1455,7 +1467,7 @@ function OperatorView({opFilter,setOpFilter,dsi,dei,setDsi,setDei,presets}){
         <p style={{margin:0,fontSize:11,fontWeight:500,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.07em"}}>Product breakdown {opFilter!=="all"?`— ${PRODUCTS[opFilter]?.label}`:""} <span style={{color:"#9ca3af",fontWeight:400,textTransform:"none",letterSpacing:0,marginLeft:6}}>({rows.length} {rows.length===1?"product":"products"})</span></p>
         <div style={{display:"flex",gap:4,alignItems:"center"}}>
           <span style={{fontSize:11,color:"#6b7280",marginRight:4}}>Sort:</span>
-          <button onClick={()=>setSortBy("proj")} style={btnStyle(sortBy==="proj")}>Proj Jun</button>
+          <button onClick={()=>setSortBy("proj")} style={btnStyle(sortBy==="proj")}>Proj {curMon}</button>
           <button onClick={()=>setSortBy("3mo")} style={btnStyle(sortBy==="3mo")}>3-mo total</button>
           <button onClick={()=>setSortBy("window")} style={btnStyle(sortBy==="window")}>Window total</button>
         </div>
@@ -1469,19 +1481,19 @@ function OperatorView({opFilter,setOpFilter,dsi,dei,setDsi,setDei,presets}){
               <th rowSpan={2} style={{padding:"6px 8px",textAlign:"left",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>Category</th>
               <th colSpan={2} style={{padding:"4px 8px 2px",textAlign:"center",fontWeight:500,color:"#6b7280",fontSize:10,textTransform:"uppercase",letterSpacing:"0.05em",borderBottom:"1px dashed #e5e7eb"}}>Window</th>
                     <th rowSpan={2} style={{padding:"6px 8px",textAlign:"right",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>MTD</th>
-              <th rowSpan={2} style={{padding:"6px 8px",textAlign:"right",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>May</th>
-              <th rowSpan={2} style={{padding:"6px 8px",textAlign:"right",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>Proj Jun</th>
-              <th colSpan={3} style={{padding:"4px 8px 2px",textAlign:"center",fontWeight:500,color:"#D85A30",fontSize:10,textTransform:"uppercase",letterSpacing:"0.05em",borderBottom:"1px dashed #e5e7eb"}}>3-month forecast (Jun–Aug)</th>
+              <th rowSpan={2} style={{padding:"6px 8px",textAlign:"right",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>{priorMon}</th>
+              <th rowSpan={2} style={{padding:"6px 8px",textAlign:"right",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>Proj {curMon}</th>
+              <th colSpan={3} style={{padding:"4px 8px 2px",textAlign:"center",fontWeight:500,color:"#D85A30",fontSize:10,textTransform:"uppercase",letterSpacing:"0.05em",borderBottom:"1px dashed #e5e7eb"}}>3-month forecast ({curMon}–{next2Mon})</th>
               <th rowSpan={2} style={{padding:"6px 8px",textAlign:"right",fontWeight:600,color:"#92400e",fontSize:11,textTransform:"uppercase",background:"#fef3c7"}}>3-mo total</th>
               <th rowSpan={2} style={{padding:"6px 8px",textAlign:"right",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>Trend</th>
-              <th rowSpan={2} style={{padding:"6px 8px",textAlign:"right",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>vs May</th>
+              <th rowSpan={2} style={{padding:"6px 8px",textAlign:"right",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>vs {priorMon}</th>
             </tr>
             <tr style={{borderBottom:"1px solid #e5e7eb",position:"sticky",top:24,background:"white",zIndex:1}}>
               <th style={{padding:"2px 8px 6px",textAlign:"right",fontWeight:500,color:"#9ca3af",fontSize:10}}>Total</th>
               <th style={{padding:"2px 8px 6px",textAlign:"right",fontWeight:500,color:"#9ca3af",fontSize:10}}>Avg/d</th>
-              <th style={{padding:"2px 8px 6px",textAlign:"right",fontWeight:500,color:"#D85A30",fontSize:10}}>Jun</th>
-              <th style={{padding:"2px 8px 6px",textAlign:"right",fontWeight:500,color:"#D85A30",fontSize:10}}>Jul</th>
-              <th style={{padding:"2px 8px 6px",textAlign:"right",fontWeight:500,color:"#D85A30",fontSize:10}}>Aug</th>
+              <th style={{padding:"2px 8px 6px",textAlign:"right",fontWeight:500,color:"#D85A30",fontSize:10}}>{curMon}</th>
+              <th style={{padding:"2px 8px 6px",textAlign:"right",fontWeight:500,color:"#D85A30",fontSize:10}}>{next1Mon}</th>
+              <th style={{padding:"2px 8px 6px",textAlign:"right",fontWeight:500,color:"#D85A30",fontSize:10}}>{next2Mon}</th>
             </tr>
           </thead>
           <tbody>
@@ -1494,10 +1506,10 @@ function OperatorView({opFilter,setOpFilter,dsi,dei,setDsi,setDei,presets}){
                 <td style={{padding:"6px 8px",textAlign:"right",color:"#6b7280",fontSize:11}}>{o.winAvg>0?o.winAvg.toFixed(o.winAvg>=10?0:1):"--"}</td>
                 <td style={{padding:"6px 8px",textAlign:"right",color:o.mtdTotal>0?cat.color:"#d1d5db",fontWeight:500}}>{o.mtdTotal>0?fN(o.mtdTotal):"--"}</td>
                 <td style={{padding:"6px 8px",textAlign:"right",color:"#6b7280"}}>{o.aprTotal>0?fN(o.aprTotal):"--"}</td>
-                <td style={{padding:"6px 8px",textAlign:"right",fontWeight:500,color:o.projMay>0?"#6b7280":"#d1d5db"}} title="Linear MTD-pace projection for end of Jun">{o.projMay>0?fN(o.projMay):"--"}</td>
-                <td style={{padding:"6px 8px",textAlign:"right",fontWeight:600,color:o.projJun>0?cat.color:"#d1d5db"}} title="Trailing-30-day avg × 30 days">{o.projJun>0?fN(o.projJun):"--"}</td>
-                <td style={{padding:"6px 8px",textAlign:"right",fontWeight:600,color:o.projJul>0?cat.color:"#d1d5db"}} title="Trailing-30-day avg × 31 days">{o.projJul>0?fN(o.projJul):"--"}</td>
-                <td style={{padding:"6px 8px",textAlign:"right",fontWeight:600,color:o.projAug>0?cat.color:"#d1d5db"}} title="Trailing-30-day avg × 31 days">{o.projAug>0?fN(o.projAug):"--"}</td>
+                <td style={{padding:"6px 8px",textAlign:"right",fontWeight:500,color:o.projMay>0?"#6b7280":"#d1d5db"}} title={`Linear MTD-pace projection for end of ${curMon}`}>{o.projMay>0?fN(o.projMay):"--"}</td>
+                <td style={{padding:"6px 8px",textAlign:"right",fontWeight:600,color:o.projJun>0?cat.color:"#d1d5db"}} title={`Linear MTD-pace projection for end of ${curMon}`}>{o.projJun>0?fN(o.projJun):"--"}</td>
+                <td style={{padding:"6px 8px",textAlign:"right",fontWeight:600,color:o.projJul>0?cat.color:"#d1d5db"}} title={`Trailing-30-day avg × ${JUL_DAYS} days`}>{o.projJul>0?fN(o.projJul):"--"}</td>
+                <td style={{padding:"6px 8px",textAlign:"right",fontWeight:600,color:o.projAug>0?cat.color:"#d1d5db"}} title={`Trailing-30-day avg × ${AUG_DAYS} days`}>{o.projAug>0?fN(o.projAug):"--"}</td>
                 <td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:o.threeMoTotal>0?"#92400e":"#d1d5db",background:"#fffbeb"}}>{o.threeMoTotal>0?fN(o.threeMoTotal):"--"}</td>
                 <td style={{padding:"6px 8px",textAlign:"right"}}><PctBadge pct={o.trendPct}/></td>
                 <td style={{padding:"6px 8px",textAlign:"right"}}><PctBadge pct={o.momPct}/></td>
@@ -1521,8 +1533,8 @@ function OperatorView({opFilter,setOpFilter,dsi,dei,setDsi,setDei,presets}){
       </div>
       <p style={{margin:"0.75rem 0 0",fontSize:11,color:"#9ca3af",lineHeight:1.6}}>
         <strong>Window total</strong> = clicks in the selected daily window (set by picker above).<br/>
-        <strong>Proj Jun</strong> = linear MTD-pace projection for end of Jun. <strong>Proj Jun/Jul/Aug</strong> = trailing-30-day daily average × days in each month.<br/>
-        <strong>3-mo total</strong> = Jun + Jul + Aug projected clicks (next 3 full months). <strong>Trend</strong> = trailing-30-day avg vs prior-30-day avg. <strong>vs May</strong> = projected Jun vs May actual.<br/>
+        <strong>Proj {curMon}</strong> = linear MTD-pace projection for end of {curMon}. <strong>Proj {curMon}/{next1Mon}/{next2Mon}</strong> = trailing-30-day daily average × days in each month.<br/>
+        <strong>3-mo total</strong> = {curMon} + {next1Mon} + {next2Mon} projected clicks (next 3 full months). <strong>Trend</strong> = trailing-30-day avg vs prior-30-day avg. <strong>vs {priorMon}</strong> = projected {curMon} vs {priorMon} actual.<br/>
         <span style={{background:"#fef3c7",color:"#92400e",padding:"1px 5px",borderRadius:3}}>auto</span> = best-effort categorization, not in your spec.
       </p>
     </div>
@@ -1613,32 +1625,4 @@ function DashboardApp() {
   const [fetchMsg,  setFetchMsg]  = useState('');
 
   useEffect(() => {
-    fetch(APPS_SCRIPT_URL + '?endpoint=all')
-      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-      .then(live => {
-        if (live.error) throw new Error(live.error);
-        applyLiveData(live);
-        setStatus('live');
-        setRenderKey(k => k + 1);
-      })
-      .catch(e => {
-        console.warn('[Dashboard] Live fetch failed:', e.message);
-        setFetchMsg(e.message);
-        setStatus('stale');
-        setRenderKey(k => k + 1);
-      });
-  }, []);
-
-  const bs = {padding:'6px 14px',marginBottom:'0.5rem',borderRadius:6,fontSize:12,display:'flex',alignItems:'center',gap:8};
-  return <div>
-    {status==='loading' && <div style={{...bs,background:'#eff6ff',color:'#1d4ed8',border:'1px solid #bfdbfe'}}>⏳ Fetching live data from GA4…</div>}
-    {status==='stale'   && <div style={{...bs,background:'#fffbeb',color:'#92400e',border:'1px solid #fbbf24'}}>⚠️ Showing cached data — live fetch failed: {fetchMsg}</div>}
-    {status==='live'    && <div style={{...bs,background:'#f0fdf4',color:'#15803d',border:'1px solid #bbf7d0'}}>✓ Live GA4 data · as of {DATA_AS_OF} · refreshes on each page load</div>}
-    <GannettDashboard key={renderKey}/>
-  </div>;
-}
-
-ReactDOM.createRoot(document.getElementById('root')).render(<DashboardApp/>);
-</script>
-</body>
-</html>
+    fetch(APP
