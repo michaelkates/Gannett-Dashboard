@@ -1128,4 +1128,53 @@ function ComparisonTab(){
     </div>}
     {/* Trend chart for By vertical mode (daily series from HOST_DAILY) */}
     {mode==="vertical" && <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"1.25rem"}}>
-      <p style={{margin:"0 0 0.75rem",fontSize:11,fontWeight:500,color
+      <p style={{margin:"0 0 0.75rem",fontSize:11,fontWeight:500,color:"#6b7280",textTransform:"uppercase",display:"flex",alignItems:"center",gap:8}}>
+        <span>{active==="all"?"All verticals":GROUPS[active]?.label||active} — daily affiliate clicks</span>
+        {compareOn && <span style={{color:"#9333ea",fontSize:10,fontWeight:600}}>· solid = {fmtFull(dsi)} → {fmtFull(dei)} · dashed = {fmtFull(cmpDsi)} → {fmtFull(cmpDei)}</span>}
+      </p>
+      {(()=>{
+        const slices = active==="all" ? Object.keys(GROUPS).map(g=>verticalDailySeries?.[g]||[]) : [verticalDailySeries?.[active]||[]];
+        const colors = active==="all" ? Object.keys(GROUPS).map(g=>GROUPS[g].color) : [GROUPS[active]?.color||"#888"];
+        const cmpSlices = compareOn && cmpVerticalDailySeries ? (active==="all" ? Object.keys(GROUPS).map(g=>cmpVerticalDailySeries[g]||[]) : [cmpVerticalDailySeries[active]||[]]) : null;
+        const cmpCols = cmpSlices ? colors : null;
+        const lbls = [];
+        for(let i=0;i<=dei-dsi;i++) lbls.push(DL(DAILY_DATES[dsi+i]));
+        return <TrendChartSimple slices={slices} colors={colors} labels={lbls} h={220} compareSlices={cmpSlices} compareColors={cmpCols}/>;
+      })()}
+    </div>}
+    {mode==="operator" && <div style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"1.25rem"}}>
+      <p style={{margin:"0 0 0.75rem",fontSize:11,fontWeight:500,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.07em"}}>By product — last 7d / MTD / {ML(MONTHS[LATEST_FULL_MONTH_IDX])} (full month)</p>
+      <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+        <thead><tr style={{borderBottom:"1px solid #e5e7eb"}}>{["Product","Cat","Last 7d","MTD",ML(MONTHS[LATEST_FULL_MONTH_IDX]),"Proj","vs"].map((h,i)=>(<th key={i} style={{padding:"5px 8px",textAlign:i<2?"left":"right",color:"#6b7280",fontSize:10,fontWeight:500}}>{h}</th>))}</tr></thead>
+        <tbody>{OPERATORS.filter(o=>o.l7>0||o.mtd>0||o.apr>0).map((o,i)=>{const cat=PRODUCTS[o.c]||{label:o.c,color:"#888"};const proj=o.mtd>0?Math.round(o.mtd/MTD.daysElapsed*MTD.daysInMonth):0;const vs=o.apr>0?((proj-o.apr)/o.apr*100):null;return <tr key={i} style={{borderBottom:"1px solid #f9fafb"}}><td style={{padding:"5px 8px",fontWeight:500}}>{o.n}</td><td style={{padding:"5px 8px"}}><span style={{fontSize:10,padding:"1px 5px",borderRadius:99,background:cat.color+"22",color:cat.color,fontWeight:600}}>{cat.label}</span></td><td style={{padding:"5px 8px",textAlign:"right",color:o.l7>0?"#111":"#d1d5db"}}>{o.l7>0?fN(o.l7):"--"}</td><td style={{padding:"5px 8px",textAlign:"right",color:o.mtd>0?"#111":"#d1d5db"}}>{o.mtd>0?fN(o.mtd):"--"}</td><td style={{padding:"5px 8px",textAlign:"right",color:o.apr>0?"#111":"#d1d5db"}}>{o.apr>0?fN(o.apr):"--"}</td><td style={{padding:"5px 8px",textAlign:"right",fontWeight:600,color:"#D85A30"}}>{o.mtd>0?fN(proj):"--"}</td><td style={{padding:"5px 8px",textAlign:"right"}}><PctBadge pct={vs}/></td></tr>;})}
+        </tbody></table></div>
+    </div>}
+  </div>;
+}
+function prodSum(name,si,ei){const arr=PROD_DAILY[name];if(!arr)return 0;let t=0;for(let i=si;i<=ei&&i<arr.length;i++)t+=(arr[i]||0);return t;}
+const FIRST_OF_MONTH_IDX=(()=>{const r={};DAILY_DATES.forEach((d,i)=>{const ym=d.slice(0,6);if(!r[ym])r[ym]=i;});return r;})();
+function fmtFull(di){const d=DAILY_DATES[di];return d?MO[parseInt(d.slice(4,6))-1]+" "+parseInt(d.slice(6,8))+" '"+d.slice(2,4):"";}
+function DateRangePicker({dsi,dei,onChange,presets}){
+  return <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+    {presets.map(p=>{const a=dsi===p.start&&dei===p.end;return <button key={p.label} onClick={()=>onChange(p.start,p.end)} style={{...btnStyle(a),fontSize:11}}>{p.label}</button>;})}
+  </div>;
+}
+function App(){
+  const [tab,setTab]=useState("rollup");
+  const stamp=`✓ Live GA4 data · as of ${DATA_AS_OF} · refreshes on each page load`;
+  return <div>
+    <div className="stamp">{stamp}</div>
+    <div style={{fontSize:11,color:"#9ca3af",textAlign:"right",marginBottom:"0.5rem"}}>Data current as of {DATA_AS_OF} · GA4 property 406717704 · event affiliate_click · product = customEvent:product</div>
+    <div style={{display:"flex",borderBottom:"2px solid #e5e7eb",marginBottom:"1.5rem"}}>
+      {[["rollup","Rollup"],["subsites","Subsites"],["comparison","Comparison"]].map(([k,l])=>{const a=tab===k;return <button key={k} onClick={()=>setTab(k)} style={{background:"none",border:"none",borderBottom:a?"3px solid #111":"3px solid transparent",marginBottom:-2,padding:"10px 20px",fontSize:15,fontWeight:a?700:400,color:a?"#111":"#6b7280",cursor:"pointer"}}>{l}</button>;})}
+    </div>
+    {tab==="rollup"&&<RollupTab/>}
+    {tab==="subsites"&&<SubsitesTab/>}
+    {tab==="comparison"&&<ComparisonTab/>}
+  </div>;
+}
+const root=ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App/>);
+</script>
+</body>
+</html>
