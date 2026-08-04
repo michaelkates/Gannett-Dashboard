@@ -917,8 +917,6 @@ function ComparisonTab(){
   const labels=MONTHS.slice(si,ei+1).map(m=>ML(m));
   const verticalData=useMemo(()=>{const r={};Object.keys(GROUPS).forEach(g=>{r[g]=MONTHS.map((_,mi)=>HOST_KEYS.filter(k=>HOSTS[k].group===g).reduce((a,k)=>a+(HOSTS[k].data[mi]||0),0));});return r;},[]);
   const isOperator = mode==="operator";
-  const catTotalAll=Object.values(catDailyTotals||{}).reduce((a,b)=>a+b,0);
-  const cmpCatTotalAll=compareOn&&cmpCatTotals?Object.values(cmpCatTotals).reduce((a,b)=>a+b,0):0;
 
   // For Category trend: aggregate PROD_DAILY into per-category daily totals across the picked window
   const catDailyTotals = useMemo(()=>{
@@ -1041,6 +1039,8 @@ function ComparisonTab(){
     const d=((curr-prev)/prev)*100;
     return {pct:d, sign:d>=0?"+":"−", abs:Math.abs(d).toFixed(1), color:d>=0?"#15803d":"#b91c1c"};
   };
+  const catTotalAll=Object.values(catDailyTotals||{}).reduce((a,b)=>a+b,0);
+  const cmpCatTotalAll=compareOn&&cmpCatTotals?Object.values(cmpCatTotals).reduce((a,b)=>a+b,0):0;
 
   return <div>
     <RecentActivity/>
