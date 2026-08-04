@@ -520,7 +520,7 @@ function TopPagesView(){
           {["#","Page","Subsite","Clicks","Share"].map((h,i)=>(<th key={i} style={{padding:"6px 8px",textAlign:i<=2?"left":"right",fontWeight:500,color:"#6b7280",fontSize:11,textTransform:"uppercase"}}>{h}</th>))}
         </tr></thead>
         <tbody>
-          {(()=>{const tot=cur.data.reduce((a,r)=>a+r.clicks,0);return cur.data.map((r,i)=>{
+          {(function(){const tot=cur.data.reduce((a,r)=>a+r.clicks,0);return cur.data.map((r,i)=>{
             const info=HOST_KEYS.find(k=>HOSTS[k].host===r.host);
             const color=info?HOSTS[info].color:"#888";
             const label=info?HOSTS[info].label:r.host;
@@ -1091,7 +1091,7 @@ function ComparisonTab(){
     </div>}
     {/* Category cards — for Category trend mode (daily-aggregated) */}
     {mode==="product" && <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:8,marginBottom:"1rem"}}>
-      {(()=>{
+      {(function(){
         const total = Object.values(catDailyTotals||{}).reduce((a,b)=>a+b,0);
         const cmpTotal = compareOn && cmpCatTotals ? Object.values(cmpCatTotals).reduce((a,b)=>a+b,0) : 0;
         return [["all","All","#888780",null],...PRODUCT_KEYS.map(k=>[k,PRODUCTS[k].label,PRODUCTS[k].color,catDailySeries?catDailySeries[k]:null])].map(([key,label,color,spark])=>{
@@ -1141,7 +1141,7 @@ function ComparisonTab(){
         <span>{active==="all"?"All categories":PRODUCTS[active]?.label} — daily affiliate clicks</span>
         {compareOn && <span style={{color:"#9333ea",fontSize:10,fontWeight:600}}>· solid = {fmtFull(dsi)} → {fmtFull(dei)} · dashed = {fmtFull(cmpDsi)} → {fmtFull(cmpDei)}</span>}
       </p>
-      {(()=>{
+      {(function(){
         const slices = active==="all" ? PRODUCT_KEYS.map(k=>catDailySeries?.[k]||[]) : [catDailySeries?.[active]||[]];
         const colors = active==="all" ? PRODUCT_KEYS.map(k=>PRODUCTS[k].color) : [PRODUCTS[active]?.color||"#888"];
         const cmpSlices = compareOn && cmpCatDailySeries ? (active==="all" ? PRODUCT_KEYS.map(k=>cmpCatDailySeries[k]||[]) : [cmpCatDailySeries[active]||[]]) : null;
@@ -1157,7 +1157,7 @@ function ComparisonTab(){
         <span>{active==="all"?"All verticals":GROUPS[active]?.label||active} — daily affiliate clicks</span>
         {compareOn && <span style={{color:"#9333ea",fontSize:10,fontWeight:600}}>· solid = {fmtFull(dsi)} → {fmtFull(dei)} · dashed = {fmtFull(cmpDsi)} → {fmtFull(cmpDei)}</span>}
       </p>
-      {(()=>{
+      {(function(){
         const slices = active==="all" ? Object.keys(GROUPS).map(g=>verticalDailySeries?.[g]||[]) : [verticalDailySeries?.[active]||[]];
         const colors = active==="all" ? Object.keys(GROUPS).map(g=>GROUPS[g].color) : [GROUPS[active]?.color||"#888"];
         const cmpSlices = compareOn && cmpVerticalDailySeries ? (active==="all" ? Object.keys(GROUPS).map(g=>cmpVerticalDailySeries[g]||[]) : [cmpVerticalDailySeries[active]||[]]) : null;
