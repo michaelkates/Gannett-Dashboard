@@ -361,6 +361,29 @@ const PROD_DAILY = D.PROD_DAILY;
 // Per-host daily series — for accurate By vertical totals at sub-monthly granularity
 const HOST_DAILY = D.HOST_DAILY;
 
+// Override OPERATORS l7 / mtd / apr from live PROD_DAILY — auto-updates every day/month without manual edits.
+// apr = last FULL month sum; mtd = last daysElapsed days; l7 = last 7 days.
+(() => {
+  if (!D.PROD_DAILY) return;
+  const _norm = s => (s||'').trim().replace(/\s+/g,' ');
+  // Build first-of-month index from DAILY_DATES (same logic as FIRST_OF_MONTH_IDX below, but needed here)
+  const _fomi = {};
+  DAILY_DATES.forEach((d,i) => { const ym=d.slice(0,6); if(!_fomi[ym]) _fomi[ym]=i; });
+  const lastFullYM = MONTHS[LATEST_FULL_MONTH_IDX];
+  const nextYM = MONTHS[LATEST_FULL_MONTH_IDX+1];
+  const aprStart = _fomi[lastFullYM] !== undefined ? _fomi[lastFullYM] : 0;
+  const aprEnd = (nextYM && _fomi[nextYM] !== undefined) ? _fomi[nextYM]-1 : DAILY_EC.length-1;
+  OPERATORS.forEach(o => {
+    const arr = D.PROD_DAILY[_norm(o.n)];
+    if (!arr || !arr.length) return;
+    o.l7  = arr.slice(-7).reduce((a,b)=>a+b,0);
+    o.mtd = arr.slice(-D.daysElapsed).reduce((a,b)=>a+b,0);
+    let aprSum=0;
+    for(let i=aprStart;i<=aprEnd&&i<arr.length;i++) aprSum+=(arr[i]||0);
+    if(aprSum>0) o.apr=aprSum;
+  });
+})();
+
 // ─── shared components ──────────────────────────────────────────────
 function PctBadge({pct,label}){
   if(pct===null||pct===undefined)return <span style={{fontSize:11,color:"#9ca3af"}}>--</span>;
@@ -1224,22 +1247,4 @@ function DateRangePicker({dsi,dei,onChange,presets}){
     {presets.map(p=>{const a=dsi===p.start&&dei===p.end;return <button key={p.label} onClick={()=>onChange(p.start,p.end)} style={{...btnStyle(a),fontSize:11}}>{p.label}</button>;})}
   </div>;
 }
-function App(){
-  const [tab,setTab]=useState("rollup");
-  const stamp=`✓ Live GA4 data · as of ${DATA_AS_OF} · refreshes on each page load`;
-  return <div>
-    <div className="stamp">{stamp}</div>
-    <div style={{fontSize:11,color:"#9ca3af",textAlign:"right",marginBottom:"0.5rem"}}>Data current as of {DATA_AS_OF} · GA4 property 406717704 · event affiliate_click · product = customEvent:product</div>
-    <div style={{display:"flex",borderBottom:"2px solid #e5e7eb",marginBottom:"1.5rem"}}>
-      {[["rollup","Rollup"],["subsites","Subsites"],["comparison","Comparison"]].map(([k,l])=>{const a=tab===k;return <button key={k} onClick={()=>setTab(k)} style={{background:"none",border:"none",borderBottom:a?"3px solid #111":"3px solid transparent",marginBottom:-2,padding:"10px 20px",fontSize:15,fontWeight:a?700:400,color:a?"#111":"#6b7280",cursor:"pointer"}}>{l}</button>;})}
-    </div>
-    {tab==="rollup"&&<RollupTab/>}
-    {tab==="subsites"&&<SubsitesTab/>}
-    {tab==="comparison"&&<ComparisonTab/>}
-  </div>;
-}
-const root=ReactDOM.createRoot(document.getElementById("root"));
-root.render(<App/>);
-</script>
-</body>
-</html>
+function
