@@ -1167,7 +1167,10 @@ function ComparisonTab(){
         return <TrendChartSimple slices={slices} colors={colors} labels={lbls} h={220} compareSlices={cmpSlices} compareColors={cmpCols}/>;
       })()}
     </div>}
-    {mode==="operator" && (()=>{
+        {mode==="operator" && <OperatorView dsi={dsi} dei={dei}/>}
+  </div>;
+}
+function OperatorView({dsi,dei}){
       const winDays=dei-dsi+1;
       const catWin={};PRODUCT_KEYS.forEach(k=>{catWin[k]=0;});
       OPERATORS.forEach(o=>{const sum=prodSum(o.n,dsi,dei);if(catWin[o.c]!==undefined)catWin[o.c]+=sum;});
@@ -1236,9 +1239,7 @@ function ComparisonTab(){
             </tbody></table></div>
         </div>
       </div>;
-    })()}
-  </div>;
-}
+    }
 function prodSum(name,si,ei){const arr=PROD_DAILY[name];if(!arr)return 0;let t=0;for(let i=si;i<=ei&&i<arr.length;i++)t+=(arr[i]||0);return t;}
 const FIRST_OF_MONTH_IDX=(()=>{const r={};DAILY_DATES.forEach((d,i)=>{const ym=d.slice(0,6);if(!r[ym])r[ym]=i;});return r;})();
 function fmtFull(di){const d=DAILY_DATES[di];return d?MO[parseInt(d.slice(4,6))-1]+" "+parseInt(d.slice(6,8))+" '"+d.slice(2,4):"";}
